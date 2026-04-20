@@ -1,0 +1,52 @@
+.root {
+    -fx-accent: #2196f3;
+}
+
+.tool-bar {
+    -fx-spacing: 10;
+    -fx-padding: 5 10 5 10;
+}
+
+.status-bar {
+    -fx-spacing: 10;
+    -fx-padding: 5;
+    -fx-text-fill: #555555;
+}
+
+#statusLabel {
+    -fx-text-fill: #333333;
+    -fx-font-weight: normal;
+}
+
+.canvas-container {
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+    -fx-border-color: #666666;
+    -fx-border-width: 2px;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 5);
+}
+
+.palette-button {
+    -fx-background-color: white;
+    -fx-text-fill: #333333;
+    -fx-font-weight: bold;
+    -fx-border-color: #cccccc;
+    -fx-border-width: 1px;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+    -fx-pref-width: 140;
+    -fx-alignment: CENTER_LEFT;
+}
+
+.palette-button:selected {
+    -fx-background-color: #e3f2fd;
+    -fx-border-color: #2196f3;
+}
+
+.tool-button {
+    -fx-font-weight: bold;
+}
+
+.analyze-button {
+    -fx-base: #e1f5fe;
+}

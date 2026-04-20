@@ -1,7 +1,9 @@
 module org.refcolor.buscareferencias {
     requires javafx.controls;
     requires javafx.fxml;
-    requires javafx.web;
+    requires java.logging;
+    requires java.sql;
+    requires org.slf4j;
 
     opens org.refcolor.buscareferencias to javafx.fxml;
     opens org.refcolor.buscareferencias.controller to javafx.fxml;

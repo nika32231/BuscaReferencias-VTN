@@ -4,12 +4,16 @@ import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+import org.refcolor.buscareferencias.utils.DatabaseManager;
 import java.io.IOException;
 
-public class HelloApplication extends Application {
+public class BuscaReferenciasApp extends Application {
     @Override
     public void start(Stage stage) throws IOException {
-        FXMLLoader fxmlLoader = new FXMLLoader(HelloApplication.class.getResource("main-view.fxml"));
+        // Inicializar base de datos
+        DatabaseManager.initDatabase();
+
+        FXMLLoader fxmlLoader = new FXMLLoader(BuscaReferenciasApp.class.getResource("main-view.fxml"));
         Scene scene = new Scene(fxmlLoader.load(), 1000, 700);
         stage.setTitle("Buscador de Referencias por Colores");
         stage.setScene(scene);

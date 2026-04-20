@@ -5,24 +5,24 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class PoseData {
-    private final Map<String, Point2D> joints = new HashMap<>();
+    private final Map<AnatomyPart, Point2D> joints = new HashMap<>();
 
-    public void addJoint(String name, double x, double y) {
-        joints.put(name, new Point2D(x, y));
+    public void addJoint(AnatomyPart part, double x, double y) {
+        joints.put(part, new Point2D(x, y));
     }
 
-    public Point2D getJoint(String name) {
-        return joints.get(name);
+    public Point2D getJoint(AnatomyPart part) {
+        return joints.get(part);
     }
 
-    public Map<String, Point2D> getAllJoints() {
+    public Map<AnatomyPart, Point2D> getAllJoints() {
         return joints;
     }
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("PoseData{");
-        joints.forEach((name, point) -> sb.append(name).append("=(").append(point.getX()).append(",").append(point.getY()).append(") "));
+        joints.forEach((part, point) -> sb.append(part.getName()).append("=(").append(point.getX()).append(",").append(point.getY()).append(") "));
         sb.append("}");
         return sb.toString();
     }
