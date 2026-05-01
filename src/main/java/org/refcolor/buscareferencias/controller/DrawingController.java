@@ -5,20 +5,28 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.concurrent.Task;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+
+import org.refcolor.buscareferencias.BuscaReferenciasApp;
 import org.refcolor.buscareferencias.model.AnatomyPart;
+import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.utils.DatabaseManager;
 import org.refcolor.buscareferencias.utils.DrawingProcessor;
+import org.refcolor.buscareferencias.utils.SearchService;
 import org.refcolor.buscareferencias.utils.SearchTermGenerator;
 
 public class DrawingController {
@@ -36,6 +44,9 @@ public class DrawingController {
     @FXML private ListView<String> termsListView;
     @FXML private TextField newTermField;
 
+    // Hito 3: Galería
+    @FXML private FlowPane galleryPane;
+
     private GraphicsContext gc;
     private AnatomyPart currentPart = AnatomyPart.HEAD;
     private double lastX, lastY;
@@ -44,6 +55,7 @@ public class DrawingController {
     private final Deque<WritableImage> redoStack = new ArrayDeque<>();
 
     private ToggleGroup toolGroup;
+    private PoseData lastAnalyzedPose;
 
     @FXML
     public void initialize() {
@@ -76,11 +88,73 @@ public class DrawingController {
     @FXML
     private void handleWebSearch() {
         if (termsListView.getItems() == null || termsListView.getItems().isEmpty()) {
-            statusLabel.setText("No hay términos para buscar.");
+            statusLabel.setText("No hay términos para buscar. Analiza el dibujo primero.");
             return;
         }
-        statusLabel.setText("Iniciando búsqueda web: " + String.join(", ", termsListView.getItems()));
-        // Esto se completará en el Hito 3
+        
+        if (lastAnalyzedPose == null) {
+            statusLabel.setText("Debes analizar el dibujo antes de buscar.");
+            return;
+        }
+        
+        statusLabel.setText("Buscando imágenes en la web...");
+        progressBar.setVisible(true);
+        progressBar.setProgress(-1);
+        galleryPane.getChildren().clear();
+
+        List<String> terms = new ArrayList<>(termsListView.getItems());
+        final PoseData poseForSearch = lastAnalyzedPose;
+
+        Task<List<ImageResult>> searchTask = new Task<>() {
+            @Override
+            protected List<ImageResult> call() {
+                return SearchService.searchImages(terms, poseForSearch);
+            }
+        };
+
+        searchTask.setOnSucceeded(e -> {
+            List<ImageResult> results = searchTask.getValue();
+            displayResults(results);
+            progressBar.setVisible(false);
+            statusLabel.setText("Búsqueda completada. " + results.size() + " imágenes encontradas.");
+        });
+
+        searchTask.setOnFailed(e -> {
+            progressBar.setVisible(false);
+            statusLabel.setText("Error en la búsqueda web.");
+        });
+
+        new Thread(searchTask).start();
+    }
+
+    private void displayResults(List<ImageResult> results) {
+        for (ImageResult result : results) {
+            VBox card = new VBox(5);
+            card.getStyleClass().add("image-card");
+            card.setAlignment(javafx.geometry.Pos.CENTER);
+            
+            ImageView iv = new ImageView();
+            try {
+                // Carga asíncrona de la imagen
+                Image img = new Image(result.getThumbnailUrl(), 150, 150, true, true, true);
+                iv.setImage(img);
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Error al cargar miniatura: {0}", result.getThumbnailUrl());
+            }
+            
+            Label label = new Label(String.format("%.0f%% match", result.getScore() * 100));
+            label.setStyle("-fx-font-size: 10px; -fx-text-fill: #666666;");
+            
+            card.getChildren().addAll(iv, label);
+            card.setCursor(javafx.scene.Cursor.HAND);
+            Tooltip.install(card, new Tooltip(result.getTitle() + "\nHaz clic para ver original"));
+            
+            card.setOnMouseClicked(e -> {
+                BuscaReferenciasApp.getInstance().getHostServices().showDocument(result.getOriginalUrl());
+            });
+            
+            galleryPane.getChildren().add(card);
+        }
     }
 
     private void clearToWhite() {
@@ -229,6 +303,7 @@ public class DrawingController {
 
         analyzeTask.setOnSucceeded(e -> {
             PoseData pose = analyzeTask.getValue();
+            this.lastAnalyzedPose = pose;
             progressBar.setVisible(false);
             if (pose.getAllJoints().isEmpty()) {
                 statusLabel.setText("No se detectaron colores anatómicos.");

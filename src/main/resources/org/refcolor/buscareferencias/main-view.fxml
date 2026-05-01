@@ -39,14 +39,24 @@
     </left>
 
     <center>
-        <StackPane style="-fx-background-color: #e8e8e8; -fx-padding: 20;">
-            <VBox alignment="CENTER" styleClass="canvas-container" fillWidth="false">
-                <Canvas fx:id="canvas" width="600" height="500"
-                        onMousePressed="#handleMousePressed"
-                        onMouseDragged="#handleMouseDragged"
-                        onMouseReleased="#handleMouseReleased"/>
+        <SplitPane orientation="VERTICAL" dividerPositions="0.6">
+            <StackPane style="-fx-background-color: #e8e8e8; -fx-padding: 10;">
+                <VBox alignment="CENTER" styleClass="canvas-container" fillWidth="false">
+                    <Canvas fx:id="canvas" width="600" height="400"
+                            onMousePressed="#handleMousePressed"
+                            onMouseDragged="#handleMouseDragged"
+                            onMouseReleased="#handleMouseReleased"/>
+                </VBox>
+            </StackPane>
+            <VBox spacing="5" style="-fx-padding: 10; -fx-background-color: white;">
+                <Label text="Galería de Referencias (Simulada)" style="-fx-font-weight: bold"/>
+                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent; -fx-background: white;">
+                    <FlowPane fx:id="galleryPane" hgap="10" vgap="10" style="-fx-padding: 10;">
+                        <!-- Las imágenes aparecerán aquí -->
+                    </FlowPane>
+                </ScrollPane>
             </VBox>
-        </StackPane>
+        </SplitPane>
     </center>
 
     <right>

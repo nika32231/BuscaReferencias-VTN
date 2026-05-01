@@ -58,11 +58,11 @@ He usado el modelo **MVC (Modelo-Vista-Controlador)** para que el código esté 
 - [x] Base de datos funcionando para guardar dibujos y usuarios.
 - [x] Estructura inicial para meter MediaPipe.
 
-### 📦 Hito 3: Búsqueda + Análisis de Imágenes (75%) 🔴
-- [ ] Generador de términos avanzado (detecta si el brazo está levantado, etc.).
-- [ ] Interfaz con lista de términos editable y hueco para la galería.
-- [ ] Lógica de búsqueda web preparada (simulada por ahora).
-- [ ] Diseño de cómo se van a comparar los ángulos de las poses.
+### 📦 Hito 3: Búsqueda + Análisis de Imágenes (75%) ✅
+- [x] Generador de términos avanzado (detecta si el brazo está levantado, etc.).
+- [x] Interfaz con lista de términos editable y hueco para la galería.
+- [x] Lógica de búsqueda web preparada (simulada por ahora).
+- [x] Diseño de cómo se van a comparar los ángulos de las poses.
 
 ### 📦 Hito 4: Comparación de Poses + Ordenación (100%) 🔴
 - [x] Planificación del nuevo algoritmo de ángulos y clustering.
@@ -106,6 +106,14 @@ Este apartado detalla los cambios realizados para profesionalizar la base del **
 *   **Sincronización Undo/Redo:** Se arregló el fallo de "primer clic inútil" al deshacer, gestionando correctamente la pila de estados (el estado inicial se guarda ahora al arrancar).
 *   **Análisis Eficiente:** El `DrawingProcessor` se ha optimizado. Antes recorría el lienzo 8 veces (una por color); ahora lo hace en una sola pasada **O(W*H)**, reduciendo drásticamente el uso de CPU.
 *   **Fluidez de la UI:** El procesamiento del dibujo se ha movido a un hilo separado (`Task`), evitando que la ventana se congele durante el análisis. Se añadió una barra de progreso.
+
+### 4.4 Errores y Mejoras (Hito 3)
+*   **Acceso a HostServices:** No se podía acceder a `getHostServices()` directamente desde el controlador para abrir URLs en el navegador. Se solucionó implementando un patrón Singleton en `BuscaReferenciasApp` para recuperar la instancia activa y sus servicios.
+*   **Tooltip en Panes:** Se detectó que los `VBox` (usados como tarjetas de imagen) no admiten el método `setTooltip()`. Se corrigió utilizando `Tooltip.install(node, tooltip)`, cumpliendo con la jerarquía de nodos de JavaFX.
+*   **Ambigüedad de Términos:** El sistema generaba términos genéricos que daban malos resultados. Ahora usa lógica espacial para detectar si los brazos están por encima de la cabeza o si la pose es sentada (comparando la distancia vertical entre torso y pies), produciendo frases de búsqueda mucho más precisas.
+*   **Layout Adaptativo:** Se ha introducido un `SplitPane` en la interfaz principal para permitir al usuario ajustar el espacio entre el lienzo de dibujo y la galería de resultados según sus necesidades.
+*   **Introducción Estructural de MediaPipe:** Se ha verificado e integrado la estructura base de `MediaPipeService`. El pipeline de búsqueda ahora está conectado formalmente con el servicio de análisis (simulado), permitiendo que la galería ya muestre puntuaciones de similitud que serán calculadas por el algoritmo real en el Hito 4.
+*   **Validación de Flujo de Búsqueda:** Se ha añadido un control de seguridad en la interfaz para impedir que el usuario intente buscar imágenes sin haber analizado el dibujo primero. Esto evita errores de inconsistencia de datos y asegura que siempre haya una pose de referencia para el algoritmo de similitud.
 
 ### 4.2 Mejoras de Arquitectura y Limpieza
 *   **Desacoplamiento (MVC real):** Se eliminó el uso de colores de JavaFX en el modelo. Ahora se usa un **Enum `AnatomyPart`** que guarda nombres y códigos hexadecimales, facilitando futuros tests sin depender de la interfaz.
@@ -153,6 +161,15 @@ El enfoque inicial basado en **centroides simples** (un solo punto por color) se
     - El ángulo se obtendrá mediante el producto escalar de estos vectores.
 4.  **Normalización de Pose:** La pose detectada se escalará a un tamaño estándar para compararla con los datos de **MediaPipe**, ignorando el tamaño o posición absoluta del dibujo en el lienzo.
 5.  **Puntuación de Similitud:** Se usará una suma ponderada de las diferencias de ángulos (la inclinación del torso y los brazos tendrá más peso que la de las manos).
+
+### 6.1 Detalle Técnico del Cálculo de Similitud (Diseño Hito 3)
+
+Para comparar la pose del dibujo con la detectada por MediaPipe en las fotos, se ha diseñado el siguiente flujo:
+
+1.  **Vectores de Articulación:** Se definirán vectores normalizados para segmentos clave: `V1(Hombro-Codo)`, `V2(Codo-Muñeca)`, `V3(Cadera-Rodilla)`, etc.
+2.  **Comparación por Coseno:** Se calculará la similitud del coseno entre los vectores del dibujo y los de la imagen analizada. La fórmula `sim = (A·B) / (|A|*|B|)` nos da un valor entre -1 y 1, donde 1 es identidad perfecta.
+3.  **Independencia de Escala:** Al usar vectores normalizados (direcciones), el algoritmo ignorará si el dibujo es pequeño o grande, centrándose solo en la "actitud" de la pose.
+4.  **Ponderación:** El Torso (30%) y los Brazos (40%) tienen prioridad sobre las piernas (30%) para el cálculo del "Score de Similitud" final que ordena la galería.
 
 ## 7. Funcionamiento de la Base de Datos
 

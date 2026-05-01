@@ -8,6 +8,16 @@ import org.refcolor.buscareferencias.utils.DatabaseManager;
 import java.io.IOException;
 
 public class BuscaReferenciasApp extends Application {
+    private static BuscaReferenciasApp instance;
+
+    public BuscaReferenciasApp() {
+        instance = this;
+    }
+
+    public static BuscaReferenciasApp getInstance() {
+        return instance;
+    }
+
     @Override
     public void start(Stage stage) throws IOException {
         // Inicializar base de datos

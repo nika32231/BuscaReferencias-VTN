@@ -15,11 +15,31 @@ public class SearchTermGeneratorTest {
         PoseData pose = new PoseData();
         pose.addJoint(AnatomyPart.HEAD, 300, 50);
         pose.addJoint(AnatomyPart.TORSO, 300, 200);
-        pose.addJoint(AnatomyPart.THIGHS, 300, 350);
+        pose.addJoint(AnatomyPart.FEET, 300, 450);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.contains("full body anatomy reference"));
-        assertTrue(terms.contains("standing pose reference"));
+        assertTrue(terms.contains("full body pose reference"));
+        assertTrue(terms.contains("standing anatomy reference"));
+    }
+
+    @Test
+    public void testGenerateTermsArmsRaised() {
+        PoseData pose = new PoseData();
+        pose.addJoint(AnatomyPart.HEAD, 300, 100);
+        pose.addJoint(AnatomyPart.HANDS, 300, 50); // Manos arriba de la cabeza
+
+        List<String> terms = SearchTermGenerator.generateTerms(pose);
+        assertTrue(terms.contains("human arms raised reference"));
+    }
+
+    @Test
+    public void testGenerateTermsSitting() {
+        PoseData pose = new PoseData();
+        pose.addJoint(AnatomyPart.TORSO, 300, 200);
+        pose.addJoint(AnatomyPart.FEET, 300, 300); // Distancia vertical 100 (< 120)
+
+        List<String> terms = SearchTermGenerator.generateTerms(pose);
+        assertTrue(terms.contains("sitting anatomy reference"));
     }
 
     @Test
@@ -29,18 +49,18 @@ public class SearchTermGeneratorTest {
         pose.addJoint(AnatomyPart.TORSO, 300, 200);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.contains("upper body anatomy reference"));
-        assertTrue(terms.contains("portrait pose reference"));
-        assertFalse(terms.contains("full body anatomy reference"));
+        assertTrue(terms.contains("upper body pose reference"));
+        assertFalse(terms.contains("full body pose reference"));
     }
 
     @Test
     public void testGenerateTermsWithArms() {
         PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.ARMS, 200, 150);
+        pose.addJoint(AnatomyPart.TORSO, 300, 200);
+        pose.addJoint(AnatomyPart.HANDS, 300, 100);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.contains("human arms pose reference"));
+        assertTrue(terms.contains("human arms up reference"));
     }
 
     @Test
