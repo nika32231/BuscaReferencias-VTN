@@ -2,6 +2,7 @@ package org.refcolor.buscareferencias.utils;
 
 import org.junit.jupiter.api.Test;
 import org.refcolor.buscareferencias.model.PoseData;
+import org.refcolor.buscareferencias.service.MediaPipeService;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class MediaPipeServiceTest {
@@ -13,11 +14,17 @@ public class MediaPipeServiceTest {
     }
 
     @Test
-    public void testCalculateSimilarityStructure() {
-        PoseData pose1 = new PoseData();
-        PoseData pose2 = new PoseData();
-        double similarity = MediaPipeService.calculateSimilarity(pose1, pose2);
+    public void testCalculateSimilarityValue() {
+        PoseData drawing = new PoseData();
+        drawing.addJoint(org.refcolor.buscareferencias.model.AnatomyPart.HEAD, 100, 50);
+        drawing.addJoint(org.refcolor.buscareferencias.model.AnatomyPart.TORSO, 100, 150);
         
-        assertTrue(similarity >= 0.0 && similarity <= 1.0, "La similitud debe estar entre 0 y 1");
+        PoseData image = new PoseData();
+        image.addLandmark(0, 0.5, 0.2); // Head
+        image.addLandmark(11, 0.4, 0.4); // L shoulder
+        image.addLandmark(12, 0.6, 0.4); // R shoulder
+        
+        double similarity = MediaPipeService.calculateSimilarity(drawing, image);
+        assertTrue(similarity > 0.5, "La similitud para poses verticales debería ser alta, actual: " + similarity);
     }
 }

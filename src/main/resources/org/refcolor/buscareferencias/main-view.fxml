@@ -5,10 +5,9 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
 
-<BorderPane xmlns="http://javafx.com/fxml"
+<BorderPane xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="org.refcolor.buscareferencias.controller.DrawingController"
-            prefHeight="700.0" prefWidth="1000.0"
             stylesheets="@style.css">
 
     <top>
@@ -22,64 +21,83 @@
             <ToggleButton fx:id="btnDraw" text="✎ Dibujar" selected="true" styleClass="tool-button"/>
             <ToggleButton fx:id="btnErase" text="🧽 Borrar" styleClass="tool-button"/>
             <Separator orientation="VERTICAL"/>
-            <Button text="🔍 Analizar (Consola)" onAction="#handleSearch" styleClass="analyze-button"/>
+            <Button text="🔍 Analizar Pose" onAction="#handleSearch" styleClass="analyze-button"/>
+            <Separator orientation="VERTICAL"/>
+            <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" styleClass="search-button-large"/>
         </ToolBar>
     </top>
 
-    <left>
-        <VBox spacing="10" prefWidth="160">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-            <Label text="Partes del Cuerpo" style="-fx-font-weight: bold"/>
-            <VBox fx:id="paletteContainer" spacing="5">
-                <!-- Los botones de la paleta se generarán dinámicamente -->
-            </VBox>
-        </VBox>
-    </left>
-
     <center>
-        <SplitPane orientation="VERTICAL" dividerPositions="0.6">
-            <StackPane style="-fx-background-color: #e8e8e8; -fx-padding: 10;">
-                <VBox alignment="CENTER" styleClass="canvas-container" fillWidth="false">
-                    <Canvas fx:id="canvas" width="600" height="400"
-                            onMousePressed="#handleMousePressed"
-                            onMouseDragged="#handleMouseDragged"
-                            onMouseReleased="#handleMouseReleased"/>
-                </VBox>
-            </StackPane>
-            <VBox spacing="5" style="-fx-padding: 10; -fx-background-color: white;">
-                <Label text="Galería de Referencias (Simulada)" style="-fx-font-weight: bold"/>
-                <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" style="-fx-background-color: transparent; -fx-background: white;">
-                    <FlowPane fx:id="galleryPane" hgap="10" vgap="10" style="-fx-padding: 10;">
-                        <!-- Las imágenes aparecerán aquí -->
-                    </FlowPane>
-                </ScrollPane>
+        <!-- SplitPane HORIZONTAL: izquierda (paleta + canvas + galería) / derecha (panel lateral colapsable) -->
+        <SplitPane fx:id="mainSplitPane" dividerPositions="0.78">
+            <BorderPane>
+                <left>
+                    <VBox spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
+                        <padding>
+                            <Insets top="10" right="10" bottom="10" left="10"/>
+                        </padding>
+                        <Label text="Partes del Cuerpo" styleClass="section-title" />
+                        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
+                            <VBox fx:id="paletteContainer" spacing="8" styleClass="palette-container">
+                                <!-- Los botones de la paleta se generan dinámicamente -->
+                            </VBox>
+                        </ScrollPane>
+                    </VBox>
+                </left>
+
+                <center>
+                    <!-- SplitPane VERTICAL: canvas arriba / galería abajo -->
+                    <SplitPane orientation="VERTICAL" dividerPositions="0.55">
+                        <StackPane fx:id="canvasRoot" styleClass="canvas-root" minHeight="320">
+                            <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="500" minHeight="350" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
+                                <Canvas fx:id="canvas"
+                                        width="900" height="600"
+                                        onMousePressed="#handleMousePressed"
+                                        onMouseDragged="#handleMouseDragged"
+                                        onMouseReleased="#handleMouseReleased"/>
+                            </StackPane>
+                        </StackPane>
+
+                        <VBox spacing="6" styleClass="gallery-root">
+                            <Label text="Galería de Referencias" styleClass="section-title"/>
+                            <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
+                                <FlowPane fx:id="galleryPane" hgap="12" vgap="12" styleClass="gallery-pane">
+                                    <!-- Las imágenes aparecen aquí -->
+                                </FlowPane>
+                            </ScrollPane>
+                        </VBox>
+                    </SplitPane>
+                </center>
+            </BorderPane>
+
+            <!-- Panel lateral: se hace realmente "invasión mínima" y colapsable -->
+            <VBox fx:id="rightPanel" minWidth="0" prefWidth="320" styleClass="right-panel">
+                <HBox alignment="CENTER_LEFT" spacing="8" styleClass="right-panel-header">
+                    <Button text="⏴" onAction="#toggleRightPanel" fx:id="togglePanelBtn" />
+                    <Label text="Búsqueda / Debug" style="-fx-font-weight: bold;" />
+                    <Pane HBox.hgrow="ALWAYS"/>
+                </HBox>
+
+                <TitledPane fx:id="searchPanel" text="Términos de Búsqueda" expanded="true" animated="true" maxHeight="Infinity">
+                    <VBox spacing="10" styleClass="right-panel-content">
+                        <ListView fx:id="termsListView" VBox.vgrow="ALWAYS" />
+                        <HBox spacing="6">
+                            <TextField fx:id="newTermField" promptText="Nuevo término..." HBox.hgrow="ALWAYS"/>
+                            <Button text="+" onAction="#handleAddTerm"/>
+                        </HBox>
+                        <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" maxWidth="Infinity" styleClass="search-button-large"/>
+                    </VBox>
+                </TitledPane>
             </VBox>
         </SplitPane>
     </center>
-
-    <right>
-        <VBox spacing="10" prefWidth="250" style="-fx-background-color: #f9f9f9; -fx-border-color: #cccccc; -fx-border-width: 0 0 0 1;">
-            <padding>
-                <Insets top="10" right="10" bottom="10" left="10"/>
-            </padding>
-            <Label text="Términos de Búsqueda" style="-fx-font-weight: bold"/>
-            <ListView fx:id="termsListView" VBox.vgrow="ALWAYS" />
-            <HBox spacing="5">
-                <TextField fx:id="newTermField" promptText="Nuevo término..." HBox.hgrow="ALWAYS"/>
-                <Button text="+" onAction="#handleAddTerm"/>
-            </HBox>
-            <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" maxWidth="Infinity" styleClass="analyze-button"/>
-        </VBox>
-    </right>
 
     <bottom>
         <HBox alignment="CENTER_LEFT" styleClass="status-bar">
             <Label text="Estado:"/>
             <Label fx:id="statusLabel" text="Listo para dibujar"/>
             <Pane HBox.hgrow="ALWAYS" />
-            <ProgressBar fx:id="progressBar" visible="false" prefWidth="150" />
+            <ProgressBar fx:id="progressBar" visible="false" prefWidth="160" />
         </HBox>
     </bottom>
 

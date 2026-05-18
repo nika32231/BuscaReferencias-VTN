@@ -36,3 +36,29 @@ build/
 .DS_Store
 ### Logs ###
 *.log
+
+*.db
+
+### Python / backend híbrido ###
+backend/.venv/
+backend/venv/
+backend/env/
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/*.log
+backend/*.sqlite3
+backend/.env
+backend/.env.*
+backend/cache/
+
+### Caché temporal de búsquedas ###
+cache/current_search/
+cache/thumbnails/
+

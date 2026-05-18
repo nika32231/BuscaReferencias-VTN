@@ -1,0 +1,2 @@
+"""Backend FastAPI para BuscaReferencias."""
+

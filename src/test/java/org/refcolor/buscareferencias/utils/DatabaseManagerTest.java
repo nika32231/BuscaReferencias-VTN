@@ -1,10 +1,10 @@
 package org.refcolor.buscareferencias.utils;
 
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.PoseData;
+import org.refcolor.buscareferencias.database.DatabaseManager;
 
 import java.io.File;
 import java.sql.Connection;
@@ -36,9 +36,24 @@ public class DatabaseManagerTest {
             // Verificar que las tablas existen
             String[] tables = {"Usuarios", "Dibujos", "Busquedas", "Resultados"};
             for (String table : tables) {
+                // language=SQLite
                 ResultSet rs = stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='" + table + "'");
                 assertTrue(rs.next(), "La tabla " + table + " debería existir");
             }
+
+            // language=SQLite
+            ResultSet columns = stmt.executeQuery("PRAGMA table_info(Resultados)");
+            java.util.Set<String> columnNames = new java.util.HashSet<>();
+            while (columns.next()) {
+                columnNames.add(columns.getString("name"));
+            }
+            assertTrue(columnNames.contains("landmarks"));
+            assertTrue(columnNames.contains("embeddings"));
+            assertTrue(columnNames.contains("similarity"));
+            assertTrue(columnNames.contains("thumbnailPath"));
+            assertTrue(columnNames.contains("sourceUrl"));
+            assertTrue(columnNames.contains("provider"));
+            assertTrue(columnNames.contains("poseAngles"));
         }
     }
 
@@ -46,6 +61,7 @@ public class DatabaseManagerTest {
     public void testDefaultUserInsertion() throws Exception {
         try (Connection conn = DatabaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
+            // language=SQLite
             ResultSet rs = stmt.executeQuery("SELECT * FROM Usuarios WHERE id_usuario = 1");
             assertTrue(rs.next(), "El usuario por defecto (ID 1) debería haber sido insertado");
             assertEquals("Usuario Local", rs.getString("nombre_usuario"));
@@ -58,12 +74,13 @@ public class DatabaseManagerTest {
         pose.addJoint(AnatomyPart.HEAD, 100, 100);
         List<String> terms = Arrays.asList("test term 1", "test term 2");
 
-        DatabaseManager.saveDrawing(pose, terms);
+        DatabaseManager.saveDrawing(pose, terms, null);
 
         try (Connection conn = DatabaseManager.getConnection();
              Statement stmt = conn.createStatement()) {
             
             // Verificar que el dibujo se guardó
+            // language=SQLite
             ResultSet rsDibujo = stmt.executeQuery("SELECT * FROM Dibujos ORDER BY id_dibujo DESC LIMIT 1");
             assertTrue(rsDibujo.next(), "Debería haber al menos un dibujo");
             String poseData = rsDibujo.getString("datos_pose");
@@ -71,6 +88,7 @@ public class DatabaseManagerTest {
             int idDibujo = rsDibujo.getInt("id_dibujo");
 
             // Verificar que los términos se guardaron
+            // language=SQLite
             ResultSet rsBusqueda = stmt.executeQuery("SELECT * FROM Busquedas WHERE id_dibujo = " + idDibujo);
             assertTrue(rsBusqueda.next(), "Deberían existir términos de búsqueda para el dibujo");
             String savedTerms = rsBusqueda.getString("terminos_busqueda");

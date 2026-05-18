@@ -6,11 +6,15 @@ import org.refcolor.buscareferencias.model.PoseData;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 public class SearchTermGenerator {
 
+    private static final double SITTING_THRESHOLD = 120.0;
+
     public static List<String> generateTerms(PoseData pose) {
-        List<String> terms = new ArrayList<>();
+        Set<String> terms = new LinkedHashSet<>();
         
         Point2D head = pose.getJoint(AnatomyPart.HEAD);
         Point2D torso = pose.getJoint(AnatomyPart.TORSO);
@@ -22,59 +26,39 @@ public class SearchTermGenerator {
         boolean hasLegs = pose.getJoint(AnatomyPart.THIGHS) != null || pose.getJoint(AnatomyPart.CALVES) != null || feet != null;
         boolean hasArms = pose.getJoint(AnatomyPart.ARMS) != null || pose.getJoint(AnatomyPart.FOREARMS) != null || hands != null;
 
-        // 1. Categoría de encuadre
         String frame = "";
-        if (hasHead && hasTorso && hasLegs) {
-            frame = "full body";
-        } else if (hasHead && hasTorso) {
-            frame = "upper body";
-        } else if (hasTorso && hasLegs) {
-            frame = "lower body";
-        }
+        if (hasHead && hasTorso && hasLegs) frame = "full body";
+        else if (hasHead && hasTorso) frame = "upper body";
+        else if (hasTorso && hasLegs) frame = "lower body";
+        else if (hasHead) frame = "portrait reference";
 
-        // 2. Detección de acciones específicas
         String action = "";
-        if (hasHead && hands != null && hands.getY() < head.getY()) {
-            action = "arms raised";
-        } else if (torso != null && hands != null && hands.getY() < torso.getY()) {
-            action = "arms up";
-        }
+        if (hasHead && hands != null && hands.getY() < head.getY()) action = "arms raised";
+        else if (torso != null && hands != null && hands.getY() < torso.getY()) action = "arms up";
+        else if (hasArms) action = "dynamic pose";
 
-        // 3. Pose (Parado vs Sentado)
         String posture = "";
         if (torso != null && feet != null) {
-            double verticalDist = feet.getY() - torso.getY();
-            if (verticalDist < 120) {
-                posture = "sitting";
-            } else {
-                posture = "standing";
-            }
+            double verticalDist = Math.abs(feet.getY() - torso.getY());
+            posture = verticalDist < SITTING_THRESHOLD ? "sitting" : "standing";
         }
 
-        // Construcción de frases de búsqueda
-        if (!frame.isEmpty()) {
-            terms.add(frame + " pose reference");
-        }
+        String anatomy = "anatomy reference";
+        if (hasHead && hasTorso && hasLegs) anatomy = "full body anatomy reference";
+        else if (hasHead && hasTorso) anatomy = "upper body anatomy reference";
+        else if (hasTorso && hasLegs) anatomy = "lower body anatomy reference";
+
+        // Construcción de frases inteligentes
+        String base = (frame + " " + posture + " " + action).trim();
+        if (base.isEmpty()) base = "human pose";
+
+        terms.add(base + " reference pinterest");
+        terms.add(base + " anatomy reference google images");
+        terms.add(base + " figure reference pexels");
+        terms.add(anatomy + " pinterest");
+        terms.add((posture.isEmpty() ? "standing pose" : posture + " pose") + " reference");
+        terms.add((action.isEmpty() ? "human pose" : action) + " anatomy reference");
         
-        if (!action.isEmpty()) {
-            terms.add("human " + action + " reference");
-            if (!frame.isEmpty()) {
-                terms.add(frame + " " + action);
-            }
-        }
-        
-        if (!posture.isEmpty()) {
-            terms.add(posture + " anatomy reference");
-        }
-
-        // Término genérico si está vacío
-        if (terms.isEmpty()) {
-            terms.add("human anatomy pose reference");
-        } else {
-            // Siempre añadir un término base
-            terms.add("drawing reference");
-        }
-
-        return terms;
+        return new ArrayList<>(terms);
     }
 }

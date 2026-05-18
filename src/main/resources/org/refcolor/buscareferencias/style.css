@@ -1,66 +1,221 @@
 .root {
-    -fx-accent: #2196f3;
+    /* Paleta neutra y descanso visual */
+    -fx-accent: #6aa6ff;
+    -fx-font-size: 13px;
+    -fx-base: #2b2f36;
+    -fx-control-inner-background: #2b2f36;
+    -fx-text-background-color: #e6e8ee;
+
+    /* Fondo general de la app (oscuro) */
+    -fx-background-color: #171a1f;
+}
+
+/* Evita zonas "blancas" por estilo Modena en contenedores comunes */
+.border-pane,
+.split-pane,
+.split-pane > .split-pane-divider,
+.split-pane > .split-pane-divider:hover,
+.scroll-pane,
+.scroll-pane > .viewport,
+.viewport {
+    -fx-background-color: transparent;
+}
+
+/* El SplitPane central debe heredar un fondo oscuro para que no se vea blanco */
+#mainSplitPane {
+    -fx-background-color: #171a1f;
+}
+
+/* Área alrededor del canvas = "workspace" oscuro tipo Photoshop/Krita */
+.canvas-root {
+    -fx-background-insets: 0;
+    -fx-background-color: #101318; /* un pelín más contrastado */
+    -fx-padding: 22; /* deja aire alrededor para que se aprecie la separación */
+}
+
+/* Tarjeta/blanco dibujable: borde + sombra suave */
+.canvas-container {
+    -fx-padding: 3;
+    -fx-background-color: #ffffff; /* canvas realmente blanco */
+
+    /* Borde doble: uno exterior oscuro + línea interior clara (tipo apps pro) */
+    -fx-border-color:
+        rgba(0,0,0,0.92),   /* exterior (define límite) */
+        rgba(255,255,255,0.95); /* interior (separación sutil con el blanco) */
+    -fx-border-width: 3px, 1px;
+    -fx-border-insets: 0, 3px;
+
+    /* Esquinas suaves (opcional, pero ayuda a la jerarquía visual) */
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+
+    /* Sombra más visible pero suave */
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.72), 36, 0, 0, 18);
+}
+
+/* Si el canvas se redimensiona y queda espacio extra, este fondo también debe ser oscuro */
+.canvas-root > .canvas-container {
+    -fx-background-insets: 0;
 }
 
 .tool-bar {
     -fx-spacing: 10;
-    -fx-padding: 5 10 5 10;
+    -fx-padding: 10 12 10 12;
+    -fx-background-color: #20242a;
+}
+
+.tool-bar .button,
+.tool-bar .toggle-button {
+    -fx-padding: 10 14 10 14;
+    -fx-font-size: 14px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-background-color: #2d323a;
+    -fx-text-fill: #e6e8ee;
+    -fx-min-height: 38;
+}
+
+.tool-bar .button:hover,
+.tool-bar .toggle-button:hover {
+    -fx-background-color: #3a404a;
 }
 
 .status-bar {
     -fx-spacing: 10;
-    -fx-padding: 5;
-    -fx-text-fill: #555555;
+    -fx-padding: 8 10 8 10;
+    -fx-background-color: #20242a;
+    -fx-text-fill: #b9beca;
 }
 
 #statusLabel {
-    -fx-text-fill: #333333;
+    -fx-text-fill: #e6e8ee;
     -fx-font-weight: normal;
+}
+
+.section-title {
+    -fx-font-weight: bold;
+    -fx-font-size: 14px;
+    -fx-text-fill: #e6e8ee;
+}
+
+.flat-scroll {
+    -fx-background-color: transparent;
+    -fx-background: transparent;
+}
+
+/* BORRAR/NEUTRALIZAR estas reglas duplicadas (se reemplazan por las de arriba)
+.canvas-root {
+    -fx-background-color: #14171c;
+    -fx-padding: 14;
 }
 
 .canvas-container {
     -fx-padding: 0;
-    -fx-background-color: transparent;
-    -fx-border-color: #666666;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #596273;
     -fx-border-width: 2px;
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.2), 10, 0, 0, 5);
+    -fx-background-radius: 14;
+    -fx-border-radius: 14;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.45), 22, 0, 0, 10);
+}
+
+.canvas-root {
+    -fx-background-insets: 0;
+}
+*/
+
+.side-palette {
+    -fx-background-color: #20242a;
+    -fx-border-color: #2d323a;
+    -fx-border-width: 0 1 0 0;
 }
 
 .palette-button {
-    -fx-background-color: white;
-    -fx-text-fill: #333333;
+    -fx-background-color: #2d323a;
+    -fx-text-fill: #e6e8ee;
     -fx-font-weight: bold;
-    -fx-border-color: #cccccc;
+    -fx-border-color: #3a404a;
     -fx-border-width: 1px;
-    -fx-background-radius: 5;
-    -fx-border-radius: 5;
-    -fx-pref-width: 140;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-pref-width: 180;
+    -fx-min-height: 52;
     -fx-alignment: CENTER_LEFT;
+    -fx-padding: 10 12 10 12;
+    -fx-font-size: 14px;
+}
+
+.palette-button:hover {
+    -fx-background-color: #3a404a;
 }
 
 .palette-button:selected {
-    -fx-background-color: #e3f2fd;
-    -fx-border-color: #2196f3;
-}
-
-.tool-button {
-    -fx-font-weight: bold;
+    -fx-background-color: #2a3a52;
+    -fx-border-color: #6aa6ff;
 }
 
 .analyze-button {
-    -fx-base: #e1f5fe;
+    -fx-background-color: #2a3a52;
+}
+
+.search-button-large {
+    -fx-background-color: #2f7d4a;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+    -fx-font-size: 15px;
+    -fx-padding: 12 20 12 20;
+    -fx-background-radius: 12;
+    -fx-min-height: 42;
+}
+
+.search-button-large:hover {
+    -fx-background-color: #3a9760;
+}
+
+.right-panel {
+    -fx-background-color: #20242a;
+    -fx-border-color: #2d323a;
+    -fx-border-width: 0 0 0 1;
+}
+
+.right-panel-header {
+    -fx-padding: 10 10 8 10;
+}
+
+.right-panel-content {
+    -fx-padding: 10;
+}
+
+.gallery-root {
+    -fx-padding: 10;
+    -fx-background-color: #1e2228;
+}
+
+.gallery-pane {
+    -fx-padding: 10;
 }
 
 .image-card {
-    -fx-padding: 5;
-    -fx-border-color: #eeeeee;
+    -fx-padding: 10;
+    -fx-border-color: #2d323a;
     -fx-border-width: 1px;
-    -fx-border-radius: 5;
-    -fx-background-radius: 5;
-    -fx-background-color: #fafafa;
+    -fx-border-radius: 12;
+    -fx-background-radius: 12;
+    -fx-background-color: #20242a;
+    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.18), 8, 0, 0, 3);
 }
 
 .image-card:hover {
-    -fx-background-color: #f0f0f0;
-    -fx-border-color: #2196f3;
+    -fx-background-color: #2d323a;
+    -fx-border-color: #6aa6ff;
+}
+
+/* Regla global para botones (incluye el "+" del panel derecho)
+   Nota: se deja la toolbar con su propia regla más específica. */
+.button {
+    -fx-padding: 10 12 10 12;
+    -fx-font-size: 13px;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-min-height: 34;
 }

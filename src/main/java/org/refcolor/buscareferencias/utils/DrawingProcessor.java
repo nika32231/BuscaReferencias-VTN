@@ -9,12 +9,16 @@ import org.refcolor.buscareferencias.model.PoseData;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Logger;
-import java.util.logging.Level;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DrawingProcessor {
 
-    private static final Logger logger = Logger.getLogger(DrawingProcessor.class.getName());
+    private static final Logger logger = LoggerFactory.getLogger(DrawingProcessor.class);
+    
+    private static final double HUE_THRESHOLD = 8.0;
+    private static final double MIN_SATURATION = 0.2;
+    private static final double MIN_BRIGHTNESS = 0.2;
 
     public static PoseData processImage(WritableImage snapshot) {
         PoseData pose = new PoseData();
@@ -45,8 +49,8 @@ public class DrawingProcessor {
                 // Identificar a qué parte anatómica pertenece el píxel (si a alguna)
                 for (AnatomyPart part : AnatomyPart.values()) {
                     if (isSimilarHSB(pixelColor, Color.web(part.getHexColor()))) {
-                        sumX.put(part, sumX.get(part) + x);
-                        sumY.put(part, sumY.get(part) + y);
+                        sumX.put(part, sumX.get(part) + (double)x / width); // Normalizado
+                        sumY.put(part, sumY.get(part) + (double)y / height); // Normalizado
                         counts.put(part, counts.get(part) + 1);
                         break; // Un píxel solo puede ser una parte
                     }
@@ -76,9 +80,13 @@ public class DrawingProcessor {
         // Diferencia de matiz (hue) - el matiz es circular (0-360)
         double diffHue = Math.abs(hue1 - hue2);
         if (diffHue > 180) diffHue = 360 - diffHue;
-
-        // Tolerancia de matiz (ej: 10 grados para separar Rojo de Rosa)
-        // y mínimos de saturación/brillo para evitar grises/negros
-        return diffHue < 10 && c1.getSaturation() > 0.2 && c1.getBrightness() > 0.2;
+ 
+        // Tolerancia de matiz reducida para evitar confusiones Rojo/Rosa
+        // y comprobamos saturación y brillo de AMBOS para simetría
+        // Nota: usamos HSB porque es robusto ante aliasing y variaciones de iluminación.
+        // Esto evita depender únicamente del color exacto (RGB) que sería frágil.
+        return diffHue < HUE_THRESHOLD 
+            && c1.getSaturation() > MIN_SATURATION && c2.getSaturation() > MIN_SATURATION
+            && c1.getBrightness() > MIN_BRIGHTNESS && c2.getBrightness() > MIN_BRIGHTNESS;
     }
 }

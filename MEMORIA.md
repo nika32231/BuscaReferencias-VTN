@@ -64,18 +64,56 @@ He usado el modelo **MVC (Modelo-Vista-Controlador)** para que el código esté 
 - [x] Lógica de búsqueda web preparada (simulada por ahora).
 - [x] Diseño de cómo se van a comparar los ángulos de las poses.
 
-### 📦 Hito 4: Comparación de Poses + Ordenación (100%) 🔴
+### 📦 Hito 4: Comparación de Poses + Ordenación (100%) ✅
 - [x] Planificación del nuevo algoritmo de ángulos y clustering.
-- [ ] Algoritmo final para calcular ángulos y puntuación (0 a 1).
-- [ ] Mostrar las imágenes ordenadas por parecido.
-- [ ] Abrir los enlaces de las fotos en el navegador.
-- [ ] Historial de búsquedas terminado y pulido visual.
+- [x] Algoritmo final para calcular ángulos y puntuación (0 a 1) basándose en MediaPipe con pesos específicos para torso y extremidades.
+- [x] Integración de MediaPipe (Estrategia Python) con modo fallback simulado y carga de imágenes de alta calidad para pruebas. Se ha optimizado el uso de MediaPipe usando el modelo Heavy (Complexity 2) para máxima precisión en fotos estáticas y se ha simplificado la instalación mediante `requirements.txt`.
+- [x] Búsqueda real orientada a Pinterest, iStock y Google Images mediante términos optimizados inyectados en el motor de búsqueda.
+- [x] Mostrar las imágenes ordenadas por parecido anatómico real (score matemático).
+- [x] Abrir los enlaces de las fotos en el navegador mediante HostServices.
+- [x] Historial de búsquedas terminado y persistido en SQLite.
+- [x] Interfaz profesional: Canvas redimensionable de 800x600 y panel de términos colapsable.
+
+### 📦 Hito 5: Arquitectura MediaPipe Avanzada (Refactor Técnico) ✅
+- [x] Evaluación de MediaPipe Tasks y Vision APIs para integración nativa.
+- [x] Implementación de **Pose Embeddings** en el puente de Python para una comparación más robusta que los ángulos simples.
+- [x] Sistema de **Similitud del Coseno** en Java para comparar vectores de características visuales.
+- [x] Sistema de diagnóstico de dependencias al arranque (chequeo automático de Python/MediaPipe).
+- [x] Refactorización de `MediaPipeService` para soportar una arquitectura híbrida (Landmarks + Embeddings).
+
+### 📦 Hito 6: Validación y Robustez Visual (Detección de Dibujos) ✅
+- [x] **Preprocesamiento Adaptativo:** Implementación de binarización invertida, dilatación y suavizado Gaussiano para que MediaPipe "entienda" monigotes finos y dibujos sin textura.
+- [x] **Depuración Visual (Viz):** Generación automática de imágenes `_debug.jpg` con los esqueletos detectados superpuestos para verificar la calidad de la detección.
+- [x] **Logs de Calidad:** Sistema de monitoreo de puntos detectados y confianza media de visibilidad (`avg_confidence`).
+- [x] **Análisis de Contornos:** Inclusión de Momentos de Hu y centroides de contornos (OpenCV) como soporte al análisis estructural.
+- [x] **Scoring Híbrido:** Algoritmo ponderado (70% Embeddings, 30% Ángulos) para maximizar la precisión en la ordenación de la galería.
+
+### 📦 Hito 7: Robustez de Búsqueda y Scraping Avanzado ✅
+- [x] **Headers de Navegador Real:** Implementación de cabeceras HTTP completas (User-Agent, Sec-Ch-Ua, Accept-Language) para evitar bloqueos anti-bot.
+- [x] **Scraping Multi-Formato:** Mejora de Regex para detectar imágenes en `srcset`, `data-src` y JSON embebido (Pinterest/iStock).
+- [x] **Fallback Resiliente:** Integración de Pixabay como fuente secundaria de alta disponibilidad.
+- [x] **Monitoreo de Conexión:** Registro detallado de códigos de estado HTTP y diagnósticos de bloqueo.
+
+### 📦 Hito 8: Arquitectura Híbrida y Browser Automation (Inspiración Pose-Search) ✅
+- [x] **Integración de Playwright (Bridge Python):** Migración del scraping frágil a automatización de navegador real (Chromium). Debido a inestabilidades con Java Modules (JPMS), se ha implementado un puente hacia Python (`scraper.py`), centralizando la lógica de automatización en un entorno más flexible.
+- [x] **Caché Persistente de IA:** Optimización drástica del rendimiento mediante el almacenamiento de `landmarks` y `embeddings` en SQLite, evitando re-analizar imágenes ya procesadas.
+- [x] **Similarity Engine Evolucionado:** Implementación de búsqueda por similitud real basada en la arquitectura de `pose-search` (80% peso en embeddings vectoriales, 20% en ángulos geométricos).
+- [x] **Pipeline de Datos Robusto:** Flujo automatizado: Dibujo -> Búsqueda Robusta -> Descarga Temporal -> Análisis IA -> Ranking Visual -> Persistencia en DB.
+
+## 4. Requisitos de Instalación
+Para que el sistema funcione correctamente, se necesita:
+1. **Java 17+** con JavaFX.
+2. **Python 3.10+** con las siguientes librerías:
+   ```bash
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
 
 ### ✨ Bonus de ui
 - [x] Mejorar el aspecto visual de los botones y la paleta (iconos, bordes redondeados).
-- [ ] Añadir temas (oscuro/claro) para que sea más cómodo trabajar.
-- [ ] Animaciones suaves al cambiar de herramienta o limpiar el lienzo.
-- [ ] Barra de progreso visual cuando el sistema esté analizando la pose.
+- [x] Barra de estado con información detallada del proceso.
+- [x] Panel de búsqueda "menos visual" (colapsable) para priorizar el lienzo y la galería.
+- [x] Carga asíncrona de miniaturas en la galería para evitar bloqueos.
 
 ### 🌐 Despliegue en la Web (GitHub Pages)
 Aunque el proyecto es una aplicación de escritorio JavaFX, se puede lanzar como página web en GitHub de la siguiente manera:
