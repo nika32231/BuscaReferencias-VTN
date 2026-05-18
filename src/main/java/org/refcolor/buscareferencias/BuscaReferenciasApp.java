@@ -15,6 +15,7 @@ import org.refcolor.buscareferencias.core.FallbackUi;
 import org.refcolor.buscareferencias.core.FeatureFlags;
 import org.refcolor.buscareferencias.database.DatabaseManager;
 import org.refcolor.buscareferencias.client.PythonImageSearchClient;
+import org.refcolor.buscareferencias.client.BackendSearchClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -94,6 +95,28 @@ public class BuscaReferenciasApp extends Application {
         }
 
         logger.info("[STARTUP] start() end (UI visible) en {} ms", Duration.between(t0, Instant.now()).toMillis());
+
+        // Probe del backend híbrido en background (no bloqueante)
+        try {
+            if (FeatureFlags.enableBackendHybrid()) {
+                new Thread(() -> {
+                    try {
+                        String base = FeatureFlags.backendBaseUrl();
+                        if (base != null && !base.isBlank()) {
+                            BackendSearchClient client = new BackendSearchClient(base, java.time.Duration.ofSeconds(FeatureFlags.backendRequestTimeoutSeconds()));
+                            boolean ok = client.isReachable();
+                            logger.info("[BACKEND] Hybrid backend reachable={} baseUrl={}", ok, base);
+                        } else {
+                            logger.info("[BACKEND] backend.enabled=true pero backend.baseUrl no está configurado");
+                        }
+                    } catch (Exception e) {
+                        logger.warn("[BACKEND] Error probe backend híbrido: {}", e.toString());
+                    }
+                }, "backend-probe-thread").start();
+            }
+        } catch (Exception e) {
+            logger.warn("[BACKEND] No se pudo lanzar el probe del backend híbrido: {}", e.toString());
+        }
     }
 
     private void checkDependenciesAsync() {
