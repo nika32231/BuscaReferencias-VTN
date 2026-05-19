@@ -3,44 +3,95 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BuscaReferencias VTN - Web Preview</title>
+    <title>BuscaReferencias VTN - Web real</title>
     <meta
       name="description"
-      content="Web preview minima de BuscaReferencias VTN preparada para futura integracion con backend."
+      content="Interfaz web real de BuscaReferencias VTN con canvas táctil, análisis de colores y búsqueda conectada al backend."
     />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <header class="topbar">
-      <div>
-        <p class="badge">Preview Web</p>
+      <div class="brand-block">
+        <p class="badge">Web híbrida real</p>
         <h1>BuscaReferencias VTN</h1>
+        <p class="subtitle">
+          Reutiliza la lógica de color, canvas, términos y galería para consultar el backend real.
+        </p>
       </div>
-      <button id="searchButton" class="primary">Buscar (mock)</button>
+
+      <div class="connection-panel">
+        <label class="field-label" for="backendUrl">Backend API</label>
+        <div class="connection-row">
+          <input
+            id="backendUrl"
+            type="url"
+            placeholder="https://tu-backend.onrender.com"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button id="connectButton" class="primary" type="button">Conectar</button>
+        </div>
+        <div class="status-row">
+          <span id="connectionBadge" class="badge badge-neutral">Desconectado</span>
+          <span id="connectionHint" class="muted">Configura una URL de backend para cargar resultados reales.</span>
+        </div>
+      </div>
     </header>
 
     <main class="layout">
+      <section class="panel panel-palette">
+        <div class="section-title">
+          <h2>Paleta anatómica</h2>
+          <p class="muted">Toca o haz clic para cambiar la parte activa.</p>
+        </div>
+        <div id="paletteGrid" class="palette-grid" aria-label="Paleta anatómica"></div>
+        <div class="tool-stack">
+          <button id="drawToolButton" class="tool-button tool-button-active" type="button">✎ Dibujar</button>
+          <button id="eraseToolButton" class="tool-button" type="button">🧽 Borrar</button>
+          <button id="clearButton" class="tool-button" type="button">🗑 Limpiar</button>
+          <button id="undoButton" class="tool-button" type="button">↩ Deshacer</button>
+          <button id="redoButton" class="tool-button" type="button">↪ Rehacer</button>
+        </div>
+      </section>
+
       <section class="panel panel-canvas">
-        <h2>Canvas de referencia</h2>
-        <p class="muted">
-          Base visual para la futura deteccion de pose y zonas de color.
-        </p>
-        <canvas id="referenceCanvas" width="720" height="420"></canvas>
+        <div class="section-title">
+          <h2>Lienzo de dibujo</h2>
+          <p id="analysisStatus" class="muted">Dibuja una pose y analiza los colores del canvas.</p>
+        </div>
+        <div class="canvas-shell">
+          <canvas id="referenceCanvas" aria-label="Lienzo de referencia táctil"></canvas>
+        </div>
+        <div class="analysis-row">
+          <button id="analyzeButton" class="primary" type="button">Analizar dibujo</button>
+          <button id="searchButton" class="primary secondary" type="button">Buscar referencias reales</button>
+        </div>
       </section>
 
       <section class="panel panel-info">
-        <h2>Estado del proyecto</h2>
-        <ul>
-          <li>Desktop JavaFX sigue siendo la version principal.</li>
-          <li>Este frontend es independiente y compatible con GitHub Pages.</li>
-          <li>La integracion real llegara via API backend (FastAPI o Node).</li>
-        </ul>
+        <div class="section-title">
+          <h2>Terminos generados</h2>
+          <p class="muted">Se derivan del dibujo real del canvas, igual que en escritorio.</p>
+        </div>
+        <ul id="termsList" class="terms-list" aria-live="polite"></ul>
+
+        <div class="info-grid">
+          <div>
+            <p class="info-label">Pose detectada</p>
+            <p id="poseSummary" class="info-value">Esperando análisis</p>
+          </div>
+          <div>
+            <p class="info-label">Modo</p>
+            <p id="modeSummary" class="info-value">Canvas local + backend remoto</p>
+          </div>
+        </div>
       </section>
 
       <section class="panel panel-results">
         <div class="section-title">
-          <h2>Referencias</h2>
-          <p id="resultStatus" class="muted">Mostrando miniaturas de ejemplo.</p>
+          <h2>Galería de referencias</h2>
+          <p id="resultStatus" class="muted">Sin resultados todavía.</p>
         </div>
         <div id="thumbnailGrid" class="thumbnail-grid" aria-live="polite"></div>
       </section>
@@ -48,8 +99,7 @@
 
     <footer class="footer">
       <small>
-        Fase actual: frontend minimo para GitHub Pages. Backend de scraping/MediaPipe
-        pendiente en siguiente etapa.
+        GitHub Pages solo sirve este frontend estático; el análisis visual y las búsquedas reales llegan desde el backend.
       </small>
     </footer>
 
