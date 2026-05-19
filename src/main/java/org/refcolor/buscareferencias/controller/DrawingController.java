@@ -611,6 +611,7 @@ public class DrawingController {
             galleryPane.getChildren().add(card);
         }
         refreshGalleryCardsSize();
+        logger.info("[GALLERY] Results rendered: {} items", results == null ? 0 : results.size());
     }
 
     @FXML
@@ -645,6 +646,7 @@ public class DrawingController {
                 
                 // Hito 2: Generar términos
                 List<String> terms = SearchTermGenerator.generateTerms(pose);
+                logger.info("[SEARCH] Terms generated: {}", terms);
                 termsListView.getItems().setAll(terms);
                 
                 // Hito 2: Guardar en Base de Datos (inicialmente sin resultados)

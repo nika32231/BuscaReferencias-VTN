@@ -137,7 +137,8 @@ function renderResults(results) {
     card.tabIndex = 0;
 
     const img = document.createElement("img");
-    img.src = item.thumbnailUrl || item.thumbnail_url || item.originalUrl || item.sourceUrl || item.cachedPath || "";
+    // Do not use local/cached paths in the web UI — prefer remote thumbnails only. src will be set later if remote.
+    img.src = "";
     img.alt = item.title || item.provider || "Referencia";
     img.loading = "lazy";
 
@@ -149,19 +150,16 @@ function renderResults(results) {
 
     const meta = document.createElement("p");
     meta.className = "thumb-meta";
-    meta.textContent = `${item.provider || "online"} · ${scorePercent.toFixed(0)}%`;
+    meta.textContent = `${(item.provider || "online").toString().charAt(0).toUpperCase() + (item.provider || "online").toString().slice(1)} · ${Math.round(scorePercent)}%`;
     meta.classList.add(scorePercent >= 60 ? "score-good" : "score-bad");
 
-    const source = document.createElement("p");
-    source.className = "thumb-source";
-    source.textContent = item.sourceUrl || item.sourcePageUrl || item.originalUrl || "";
-
-    body.append(title, meta, source);
+    // Show provider friendly name only (no internal paths or URLs).
+    body.append(title, meta);
     card.append(img, body);
 
     const openSource = () => {
-      const target = item.sourceUrl || item.sourcePageUrl || item.originalUrl;
-      if (target) {
+      const target = (item.sourceUrl || item.sourcePageUrl || item.originalUrl || "").toString();
+      if (target && /^https?:\/\//i.test(target)) {
         window.open(target, "_blank", "noopener,noreferrer");
       }
     };
@@ -174,7 +172,21 @@ function renderResults(results) {
       }
     });
 
-    els.thumbnailGrid.appendChild(card);
+    // Only append cards with a valid remote thumbnail and at least a remote target URL
+    const thumbUrl = (item.thumbnailUrl || item.thumbnail_url || item.originalUrl || item.sourceUrl || "").toString();
+    const hasRemoteThumb = /^https?:\/\//i.test(thumbUrl);
+    const hasRemoteTarget = /^https?:\/\//i.test((item.sourceUrl || item.sourcePageUrl || item.originalUrl || "").toString());
+    if (hasRemoteThumb) {
+      card.querySelector("img").src = thumbUrl;
+      // allow click only if there's an online origin
+      if (hasRemoteTarget) {
+        els.thumbnailGrid.appendChild(card);
+      } else {
+        // Append card but don't make it open anything
+        card.style.opacity = "0.9";
+        els.thumbnailGrid.appendChild(card);
+      }
+    }
   });
 }
 
@@ -532,7 +544,8 @@ async function connectBackend() {
     state.connected = true;
     state.capabilities = capabilities;
     setConnectionStatus("good", "Conectado");
-    els.connectionHint.textContent = `${health.service || "Backend"} · cache ${health.cacheDir || "n/a"}`;
+    // Do not display internal paths or cache directories in the UI
+    els.connectionHint.textContent = `${health.service || "Backend"}`;
     setModeSummary(capabilities ? `API real: ${capabilities.providers?.length || 0} proveedores` : "API real disponible");
     return true;
   } catch (error) {

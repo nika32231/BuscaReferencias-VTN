@@ -31,6 +31,11 @@ Salida (enriquecida):
 
 from __future__ import annotations
 
+from gallery_engine import main as gallery_main
+
+if __name__ == "__main__":
+    raise SystemExit(gallery_main())
+
 import argparse
 import asyncio
 import json
@@ -43,6 +48,8 @@ from urllib.parse import quote_plus, urlparse, parse_qs, unquote
 from typing import List, Dict, Optional, Any
 
 import requests
+
+from gallery_engine import main as gallery_main
 
 # Cache temporal por busqueda/sesion. Se limpia desde Java al iniciar busqueda.
 CACHE_DIR = Path("cache") / "current_search" / "search_cache"
@@ -727,5 +734,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(gallery_main())
 

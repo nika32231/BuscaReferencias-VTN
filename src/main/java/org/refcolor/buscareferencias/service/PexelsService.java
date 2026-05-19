@@ -136,6 +136,7 @@ public final class PexelsService {
             }
 
             logger.info("[PEXELS] Downloading thumbnails... (requested {})", p);
+            logger.info("[PEXELS] Download complete: {} thumbnails prepared", out.size());
             return out;
         } catch (Exception e) {
             logger.error("[PEXELS] Error searching Pexels", e);

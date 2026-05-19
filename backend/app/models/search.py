@@ -40,7 +40,7 @@ class SearchResult(BaseModel):
 
 class CapabilityInfo(BaseModel):
     providers: list[str]
-    cacheDir: str
+    cacheDir: str | None = None
     maxCacheImages: int
     onlineSearchEnabled: bool = False
     mediaPipeEnabled: bool = False

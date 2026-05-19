@@ -346,6 +346,17 @@ body {
   background: #10141b;
 }
 
+/* Rounded thumbnails and subtle elevation for visual gallery */
+.thumb-card img {
+  border-radius: 12px 12px 0 0;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.thumb-card:hover img {
+  transform: translateY(-3px) scale(1.01);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
 .thumb-body {
   display: grid;
   gap: 0.35rem;
@@ -475,6 +486,19 @@ body {
   .primary,
   .tool-button {
     width: 100%;
+  }
+}
+
+/* Mobile friendly grid: 1 column small screens, 2 columns for larger phones */
+@media (max-width: 520px) {
+  .thumbnail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 521px) and (max-width: 840px) {
+  .thumbnail-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

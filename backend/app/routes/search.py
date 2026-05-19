@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
-from app.models.search import CapabilityInfo, SearchRequest, SearchResult
-from app.services.search_service import SearchService, get_search_service
+from ..models.search import CapabilityInfo, SearchRequest, SearchResult
+from ..services.search_service import SearchService, get_search_service
 
 router = APIRouter(tags=["search"])
 

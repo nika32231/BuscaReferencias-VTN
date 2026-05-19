@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
-from app.models.search import CapabilityInfo, SearchRequest, SearchResult
-from app.services.python_engine_bridge import DEFAULT_ENGINE_BRIDGE, PythonEngineBridge
-from app.utils.cache_manager import CacheManager
-from app.utils.settings import settings
+from ..models.search import CapabilityInfo, SearchRequest, SearchResult
+from .python_engine_bridge import DEFAULT_ENGINE_BRIDGE, PythonEngineBridge
+from ..utils.cache_manager import CacheManager
+from ..utils.settings import settings
 
 DEFAULT_PROVIDERS = settings.default_providers
 
@@ -14,8 +15,8 @@ DEFAULT_PROVIDERS = settings.default_providers
 class SearchService:
     def __init__(
         self,
-        cache_manager: CacheManager | None = None,
-        engine_bridge: PythonEngineBridge | None = None,
+        cache_manager: Any | None = None,
+        engine_bridge: Any | None = None,
     ) -> None:
         self.cache = cache_manager or CacheManager(settings.cache_dir, settings.max_cache_images)
         self.engine = engine_bridge or DEFAULT_ENGINE_BRIDGE
@@ -33,7 +34,7 @@ class SearchService:
     def capabilities(self) -> CapabilityInfo:
         return CapabilityInfo(
             providers=DEFAULT_PROVIDERS,
-            cacheDir=str(self.cache.root),
+            cacheDir=None,
             maxCacheImages=self.cache.max_images,
             onlineSearchEnabled=self.engine.is_ready(),
             mediaPipeEnabled=self.engine.is_ready(),

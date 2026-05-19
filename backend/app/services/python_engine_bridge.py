@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
-from pathlib import Path
 
-from app.models.search import SearchRequest, SearchResult
-from app.utils.settings import settings
+from ..models.search import SearchRequest, SearchResult
+from ..utils.settings import settings
 
 
 class PythonEngineBridge:
@@ -37,6 +35,13 @@ class PythonEngineBridge:
             "--session-id",
             request.sessionId or "backend-session",
         ]
+
+        if request.poseData is not None:
+            try:
+                cmd.extend(["--pose-json", json.dumps(request.poseData, ensure_ascii=False)])
+            except Exception:
+                # Si el payload no es serializable, seguimos sin pose_json.
+                pass
 
         try:
             completed = subprocess.run(
@@ -113,7 +118,7 @@ class PythonEngineBridge:
     @staticmethod
     def _normalize_similarity(value: object) -> int:
         try:
-            numeric = float(value)
+            numeric = float(str(value))
         except Exception:
             return 0
 

@@ -30,6 +30,8 @@ import java.net.HttpURLConnection;
  */
 public class MediaPipeService {
 
+    // Caché temporal en memoria durante la sesión de búsqueda para evitar re-análisis
+    private static final java.util.concurrent.ConcurrentMap<String, PoseData> SESSION_POSE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     /**
      * Servicio para descargar y cachear imágenes localmente para generar miniaturas reales.
      */
@@ -67,6 +69,8 @@ public class MediaPipeService {
                 } else {
                     Files.createDirectories(sessionPath);
                 }
+                // Al iniciar nueva sesión de caché también limpiamos la caché de poses en memoria
+                try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
             } catch (Exception e) {
                 logger.warn("No se pudo iniciar sesión de caché temporal: {}", e.toString());
             }
@@ -121,6 +125,24 @@ public class MediaPipeService {
                         out.write(buffer, 0, bytesRead);
                     }
                 }
+                // Enforce maximum files en el directorio de caché objetivo (sesión o global)
+                try {
+                    Path dir = cachedFile.getParent();
+                    try (var stream = Files.list(dir)) {
+                        List<Path> files = stream.filter(Files::isRegularFile).toList();
+                        if (files.size() > 100) {
+                            files.sort((a,b) -> {
+                                try {
+                                    return Files.getLastModifiedTime(a).compareTo(Files.getLastModifiedTime(b));
+                                } catch (Exception e) { return 0; }
+                            });
+                            int toDelete = files.size() - 100;
+                            for (int i = 0; i < toDelete; i++) {
+                                try { Files.deleteIfExists(files.get(i)); } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
                 return cachedFile.toUri().toString();
             } catch (Exception e) {
                 logger.error("Error al cachear imagen: " + imageUrl, e);
@@ -164,23 +186,38 @@ public class MediaPipeService {
         }
     }
 
+    /**
+     * Limpia la caché de poses en memoria (llamar al iniciar una nueva búsqueda)
+     */
+    public static void clearSessionPoseCache() {
+        try { SESSION_POSE_CACHE.clear(); } catch (Exception ignored) {}
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(MediaPipeService.class);
 
     /**
      * Analiza una imagen (URL o local) para extraer la pose usando MediaPipe vía Python.
      */
     public static PoseData analyzeImage(String imageSource) {
-        // Primero intentamos buscar en caché de base de datos
+        // 1) Intentar caché de sesión en memoria
+        if (imageSource != null && SESSION_POSE_CACHE.containsKey(imageSource)) {
+            logger.info("[MEDIAPIPE] Usando pose cacheada en sesión para: {}", imageSource);
+            return SESSION_POSE_CACHE.get(imageSource);
+        }
+
+        // 2) Intentamos buscar en caché de base de datos
         PoseData cachedPose = DatabaseManager.getCachedPose(imageSource);
         if (cachedPose != null) {
-            logger.info("Usando pose cacheada para: " + imageSource);
+            logger.info("[MEDIAPIPE] Usando pose cacheada en BD para: {}", imageSource);
+            // Guardamos también en caché de sesión para evitar múltiples lecturas
+            SESSION_POSE_CACHE.put(imageSource, cachedPose);
             return cachedPose;
         }
 
-        logger.info("MediaPipe analizando: " + imageSource);
+            logger.info("[MEDIAPIPE] Analizando: {}", imageSource);
         Path tempFile = null;
         try {
-            if (imageSource.startsWith("http")) {
+            if (imageSource != null && imageSource.startsWith("http")) {
                 tempFile = Files.createTempFile("mp_img_", ".jpg");
                 try (var in = new URL(imageSource).openStream()) {
                     Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
@@ -196,7 +233,7 @@ public class MediaPipeService {
                     60
             );
 
-            if (result.succeeded()) {
+                    if (result.succeeded()) {
                 String outStr = result.stdout();
                 if (outStr.contains("\"landmarks\":")) {
                     PoseData pose = new PoseData();
@@ -243,6 +280,8 @@ public class MediaPipeService {
                         }
                     }
                     
+                    // Guardar en caché de sesión para evitar re-análisis durante la búsqueda
+                    try { SESSION_POSE_CACHE.put(imageSource, pose); } catch (Exception ignored) {}
                     return pose;
                 }
             }
@@ -263,36 +302,146 @@ public class MediaPipeService {
     }
 
     /**
-     * Calcula la similitud entre la pose del dibujo y la de la imagen.
-     * Sistema híbrido: Embeddings (Coseno) + Ángulos + (Próximamente Contornos)
+     * Calcula la similitud final combinando varios componentes reales.
+     * Fórmula base: 0.45 cosine + 0.25 pose angles + 0.20 skeleton + 0.10 contour
+     * Si no hay embeddings, redistribuye los pesos: 0.50 pose angles + 0.35 skeleton + 0.15 contour
      */
     public static double calculateSimilarity(PoseData drawingPose, PoseData imagePose) {
-        if (imagePose.getAllLandmarks().isEmpty() || drawingPose.getAllJoints().isEmpty()) {
-            return 0.0;
+        if (imagePose == null || drawingPose == null) return 0.0;
+        if (imagePose.getAllLandmarks().isEmpty() || drawingPose.getAllJoints().isEmpty()) return 0.0;
+
+        double cosine = calculateCosineSimilarity(drawingPose.getEmbedding(), imagePose.getEmbedding());
+        double angles = calculateAngleBasedSimilarity(drawingPose, imagePose);
+        double skeleton = calculateSkeletonSimilarity(drawingPose, imagePose);
+        double contour = calculateContourSimilarity(drawingPose, imagePose);
+
+        double finalScore;
+        boolean hasEmbeddings = cosine > 0.0;
+        if (hasEmbeddings) {
+            // Con embeddings: usar pesos originales
+            finalScore = (0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour);
+        } else {
+            // Sin embeddings: redistribuir pesos para no perder señal
+            finalScore = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
         }
-
-        boolean hasEmbeddings = !drawingPose.getEmbedding().isEmpty() && !imagePose.getEmbedding().isEmpty();
-        double structuralScore = calculateStructuralScore(drawingPose, imagePose);
-
-        if (!hasEmbeddings) {
-            return structuralScore;
-        }
-
-        // Cuando existen embeddings, los combinamos con la estructura para mantener estabilidad.
-        double embeddingScore = calculateCosineSimilarity(drawingPose.getEmbedding(), imagePose.getEmbedding());
-        return (embeddingScore * 0.7) + (structuralScore * 0.3);
+        finalScore = Math.max(0.0, Math.min(1.0, finalScore));
+        logger.info("[SIMILARITY] components: cosine={} angles={} skeleton={} contour={} final={} (hasEmbeddings={})",
+                String.format("%.4f", cosine), String.format("%.4f", angles), String.format("%.4f", skeleton), String.format("%.4f", contour), String.format("%.4f", finalScore), hasEmbeddings);
+        return finalScore;
     }
 
-    private static double calculateStructuralScore(PoseData drawingPose, PoseData imagePose) {
-        double totalScore = 0;
-        double totalWeight = 0;
+    private static double calculateSkeletonSimilarity(PoseData drawingPose, PoseData imagePose) {
+        try {
+            var joints = drawingPose.getAllJoints();
+            var lm = imagePose.getAllLandmarks();
 
-        var lm = imagePose.getAllLandmarks();
-        var joints = drawingPose.getAllJoints();
+            javafx.geometry.Point2D drawCenter = joints.getOrDefault(org.refcolor.buscareferencias.model.AnatomyPart.TORSO, null);
+            javafx.geometry.Point2D imgCenter = null;
+            if (lm.containsKey(23) && lm.containsKey(24)) {
+                imgCenter = new javafx.geometry.Point2D((lm.get(23).getX() + lm.get(24).getX()) / 2.0, (lm.get(23).getY() + lm.get(24).getY()) / 2.0);
+            } else if (lm.containsKey(11) && lm.containsKey(12)) {
+                imgCenter = new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0, (lm.get(11).getY() + lm.get(12).getY()) / 2.0);
+            }
+            if (drawCenter == null || imgCenter == null) return 0.0;
 
-        // Reutilizamos la lógica de ángulos existente, pero encapsulada
-        // ... (resto del código de ángulos) ...
-        return calculateAngleBasedSimilarity(drawingPose, imagePose);
+            double drawScale = 0.0;
+            if (joints.containsKey(org.refcolor.buscareferencias.model.AnatomyPart.HEAD) && joints.containsKey(org.refcolor.buscareferencias.model.AnatomyPart.TORSO)) {
+                drawScale = joints.get(org.refcolor.buscareferencias.model.AnatomyPart.HEAD).distance(joints.get(org.refcolor.buscareferencias.model.AnatomyPart.TORSO));
+            }
+            double imgScale = 0.0;
+            if (lm.containsKey(0) && (lm.containsKey(11) || lm.containsKey(12))) {
+                javafx.geometry.Point2D shoulder = lm.containsKey(11) && lm.containsKey(12) ?
+                        new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0, (lm.get(11).getY() + lm.get(12).getY()) / 2.0) :
+                        lm.get(11) != null ? new javafx.geometry.Point2D(lm.get(11).getX(), lm.get(11).getY()) : new javafx.geometry.Point2D(lm.get(12).getX(), lm.get(12).getY());
+                imgScale = new javafx.geometry.Point2D(lm.get(0).getX(), lm.get(0).getY()).distance(shoulder);
+            }
+            if (drawScale <= 0 || imgScale <= 0) return 0.0;
+
+            java.util.Map<org.refcolor.buscareferencias.model.AnatomyPart, Integer[]> mapping = new java.util.HashMap<>();
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.HEAD, new Integer[]{0});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.ARMS, new Integer[]{11,12});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.FOREARMS, new Integer[]{13,14});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.HANDS, new Integer[]{15,16});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.THIGHS, new Integer[]{23,24});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.CALVES, new Integer[]{25,26});
+            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.FEET, new Integer[]{27,28});
+
+            double total = 0.0;
+            int counted = 0;
+            for (var entry : mapping.entrySet()) {
+                var part = entry.getKey();
+                if (!joints.containsKey(part)) continue;
+                javafx.geometry.Point2D drawP = joints.get(part);
+                Integer[] ids = entry.getValue();
+                javafx.geometry.Point2D imgP = null;
+                int found = 0;
+                double sumX = 0, sumY = 0;
+                for (int id : ids) {
+                    if (lm.containsKey(id)) {
+                        sumX += lm.get(id).getX();
+                        sumY += lm.get(id).getY();
+                        found++;
+                    }
+                }
+                if (found == 0) continue;
+                imgP = new javafx.geometry.Point2D(sumX / found, sumY / found);
+
+                double ndx = (drawP.getX() - drawCenter.getX()) / drawScale;
+                double ndy = (drawP.getY() - drawCenter.getY()) / drawScale;
+                double nix = (imgP.getX() - imgCenter.getX()) / imgScale;
+                double niy = (imgP.getY() - imgCenter.getY()) / imgScale;
+
+                double dist = Math.hypot(ndx - nix, ndy - niy);
+                double sim = Math.max(0.0, 1.0 - (dist / 1.5));
+                total += sim;
+                counted++;
+            }
+            return counted == 0 ? 0.0 : (total / counted);
+        } catch (Exception e) {
+            logger.debug("Error calculating skeleton similarity: {}", e.toString());
+            return 0.0;
+        }
+    }
+
+    private static double calculateContourSimilarity(PoseData drawingPose, PoseData imagePose) {
+        try {
+            var joints = drawingPose.getAllJoints();
+            var lm = imagePose.getAllLandmarks();
+            double[] drawBounds = getBoundsFromJoints(joints);
+            double[] imgBounds = getBoundsFromLandmarks(lm);
+            if (drawBounds == null || imgBounds == null) return 0.0;
+            double drawRatio = drawBounds[2] / Math.max(1e-6, drawBounds[3]);
+            double imgRatio = imgBounds[2] / Math.max(1e-6, imgBounds[3]);
+            double diff = Math.abs(drawRatio - imgRatio);
+            double sim = Math.max(0.0, 1.0 - (diff / Math.max(drawRatio, imgRatio)));
+            return Math.max(0.0, Math.min(1.0, sim));
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
+
+    private static double[] getBoundsFromJoints(java.util.Map<org.refcolor.buscareferencias.model.AnatomyPart, javafx.geometry.Point2D> joints) {
+        if (joints == null || joints.isEmpty()) return null;
+        double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (var p : joints.values()) {
+            minX = Math.min(minX, p.getX());
+            minY = Math.min(minY, p.getY());
+            maxX = Math.max(maxX, p.getX());
+            maxY = Math.max(maxY, p.getY());
+        }
+        return new double[]{minX, minY, maxX - minX, maxY - minY};
+    }
+
+    private static double[] getBoundsFromLandmarks(java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (lm == null || lm.isEmpty()) return null;
+        double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE, maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        for (var p : lm.values()) {
+            minX = Math.min(minX, p.getX());
+            minY = Math.min(minY, p.getY());
+            maxX = Math.max(maxX, p.getX());
+            maxY = Math.max(maxY, p.getY());
+        }
+        return new double[]{minX, minY, maxX - minX, maxY - minY};
     }
 
     private static double calculateAngleBasedSimilarity(PoseData drawingPose, PoseData imagePose) {
@@ -393,3 +542,6 @@ public class MediaPipeService {
     }
 
 }
+
+
+

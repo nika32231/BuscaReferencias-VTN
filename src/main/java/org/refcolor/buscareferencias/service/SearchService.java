@@ -79,6 +79,7 @@ public class SearchService {
                 if (canAnalyzeImage(analysisSource)) {
                     imagePose = MediaPipeService.analyzeImage(analysisSource);
                     score = MediaPipeService.calculateSimilarity(drawingPose, imagePose);
+                    logger.info("[SIMILARITY] Score calculated {} for {}", String.format("%.4f", score), analysisSource);
                 }
 
                 ImageResult scored = buildDisplayResult(candidate, score, imagePose);
