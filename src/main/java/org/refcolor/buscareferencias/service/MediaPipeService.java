@@ -55,22 +55,37 @@ public class MediaPipeService {
     private static final Logger logger = LoggerFactory.getLogger(MediaPipeService.class);
 
     /**
-     * Analiza una imagen (URL o local) para extraer la pose usando MediaPipe vía Python.
+     * Devuelve una pose cacheada (sesión o BD) sin invocar Python.
+     */
+    public static PoseData peekCachedPose(String imageSource) {
+        if (imageSource == null || imageSource.isBlank()) {
+            return null;
+        }
+        String key = LocalImagePaths.toAbsolutePath(imageSource);
+        if (key == null) {
+            key = imageSource;
+        }
+        if (SESSION_POSE_CACHE.containsKey(key)) {
+            return SESSION_POSE_CACHE.get(key);
+        }
+        PoseData dbPose = DatabaseManager.getCachedPose(key);
+        if (dbPose == null) {
+            dbPose = DatabaseManager.getCachedPose(imageSource);
+        }
+        if (dbPose != null && !dbPose.getAllLandmarks().isEmpty()) {
+            SESSION_POSE_CACHE.put(key, dbPose);
+        }
+        return dbPose;
+    }
+
+    /**
+     * Analiza una imagen local para extraer la pose usando MediaPipe vía Python.
      */
     public static PoseData analyzeImage(String imageSource) {
-        // 1) Intentar caché de sesión en memoria
-        if (imageSource != null && SESSION_POSE_CACHE.containsKey(imageSource)) {
-            logger.info("[MEDIAPIPE] Usando pose cacheada en sesión para: {}", imageSource);
-            return SESSION_POSE_CACHE.get(imageSource);
-        }
-
-        // 2) Intentamos buscar en caché de base de datos
-        PoseData cachedPose = DatabaseManager.getCachedPose(imageSource);
-        if (cachedPose != null) {
-            logger.info("[MEDIAPIPE] Usando pose cacheada en BD para: {}", imageSource);
-            // Guardamos también en caché de sesión para evitar múltiples lecturas
-            SESSION_POSE_CACHE.put(imageSource, cachedPose);
-            return cachedPose;
+        PoseData cached = peekCachedPose(imageSource);
+        if (cached != null && !cached.getAllLandmarks().isEmpty()) {
+            logger.info("[MEDIAPIPE] Usando pose cacheada para: {}", imageSource);
+            return cached;
         }
 
             logger.info("[MEDIAPIPE] Analizando: {}", imageSource);

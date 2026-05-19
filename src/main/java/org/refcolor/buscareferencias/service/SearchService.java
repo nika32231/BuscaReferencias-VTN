@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -28,7 +29,6 @@ import java.util.stream.Stream;
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
     private static final ExecutorService executor = Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors() / 2));
-    private static final int ANALYSIS_LIMIT = 200;
 
     public static List<ImageResult> searchImages(List<String> terms, PoseData drawingPose) {
         List<String> normalizedTerms = normalizeTerms(terms);
@@ -49,11 +49,13 @@ public class SearchService {
     }
 
     private static List<ImageResult> searchLocalImages(List<String> terms, PoseData drawingPose) {
-        List<ImageResult> discovered = loadLocalCandidates(ANALYSIS_LIMIT);
+        List<ImageResult> discovered = loadLocalCandidates();
         if (discovered.isEmpty()) {
             logger.warn("No se encontraron imágenes locales en {}.", PoseToleranceConfig.localImageDir());
             return List.of();
         }
+
+        logger.info("Biblioteca local: {} fotos en {}", discovered.size(), PoseToleranceConfig.localImageDir());
 
         if (drawingPose == null || drawingPose.getAllJoints().isEmpty()) {
             return finalizeResults(
@@ -62,14 +64,40 @@ public class SearchService {
             );
         }
 
+        List<ImageResult> cachedHits = new ArrayList<>();
+        List<ImageResult> needsAnalysis = new ArrayList<>();
+
+        for (ImageResult candidate : discovered) {
+            String path = LocalImagePaths.toAbsolutePath(
+                    firstNonBlank(candidate.getOriginalUrl(), candidate.getThumbnailUrl(), candidate.getSourcePageUrl())
+            );
+            if (path == null) {
+                continue;
+            }
+            PoseData cachedPose = MediaPipeService.peekCachedPose(path);
+            if (cachedPose != null && !cachedPose.getAllLandmarks().isEmpty()) {
+                double score = MediaPipeService.calculateSimilarity(drawingPose, cachedPose);
+                ImageResult scored = buildDisplayResult(candidate, score, cachedPose, String.join(" ", terms));
+                cachedHits.add(scored);
+            } else {
+                needsAnalysis.add(candidate);
+            }
+        }
+
+        Collections.shuffle(needsAnalysis);
+        int analysisBudget = PoseToleranceConfig.analysisLimitPerSearch();
+        int toAnalyze = Math.min(needsAnalysis.size(), analysisBudget);
+
+        logger.info("Puntuadas al instante (caché): {}. Por analizar ahora: {}/{}.",
+                cachedHits.size(), toAnalyze, needsAnalysis.size());
+
         List<Future<ImageResult>> futures = new ArrayList<>();
-        int maxToAnalyze = Math.min(discovered.size(), ANALYSIS_LIMIT);
-        for (int i = 0; i < maxToAnalyze; i++) {
-            ImageResult candidate = discovered.get(i);
+        for (int i = 0; i < toAnalyze; i++) {
+            ImageResult candidate = needsAnalysis.get(i);
             futures.add(executor.submit(() -> scoreCandidate(candidate, drawingPose, terms)));
         }
 
-        List<ImageResult> results = new ArrayList<>();
+        List<ImageResult> results = new ArrayList<>(cachedHits);
         for (Future<ImageResult> future : futures) {
             try {
                 results.add(future.get());
@@ -79,7 +107,8 @@ public class SearchService {
         }
 
         List<ImageResult> finalized = finalizeResults(results, true);
-        logger.info("Búsqueda local completada. {} imágenes mostradas.", finalized.size());
+        logger.info("Búsqueda local completada. {} imágenes mostradas (de {} en carpeta).",
+                finalized.size(), discovered.size());
         return finalized;
     }
 
