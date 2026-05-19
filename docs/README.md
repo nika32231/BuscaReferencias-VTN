@@ -1,52 +1,118 @@
-# Web Frontend Minimo (GitHub Pages)
+# Web real para GitHub Pages
 
-Esta carpeta `docs/` contiene una version web minima e independiente del proyecto.
+La carpeta `docs/` es el **frontend web real** del proyecto.
 
-> Nota: la ruta prioritaria de transicion para reutilizar JavaFX/FXML es **JPro**.
-> Este frontend estatico se mantiene como fallback y para pruebas visuales rapidas.
+Está pensado para reutilizar el trabajo ya hecho en desktop:
 
-## Objetivo
+- la misma paleta anatómica,
+- el canvas de dibujo,
+- la lógica de detección de colores,
+- la generación de términos,
+- la galería de resultados con porcentaje y enlace original,
+- y la conexión al backend FastAPI existente.
 
-- Mantener intacta la app JavaFX desktop.
-- Tener una base visual estable para evolucion web.
-- Permitir publicacion en GitHub Pages sin backend ejecutandose en Pages.
+## Qué hace esta versión web
 
-## Contenido
+- Funciona en escritorio, móvil y tablet.
+- Permite dibujar con ratón o táctil.
+- Analiza el canvas localmente para generar términos reales.
+- Consulta el backend REST real para obtener imágenes auténticas.
+- Muestra miniaturas, porcentaje y enlace de origen.
 
-- `index.html`: layout principal.
-- `style.css`: tema oscuro y responsive basico.
-- `app.js`: canvas mock, miniaturas mock y funcion preparada para backend.
+## Qué no hace GitHub Pages
 
-## Integracion futura
+GitHub Pages solo sirve archivos estáticos:
 
-`app.js` ya incluye la funcion:
+- `HTML`
+- `CSS`
+- `JavaScript`
 
-```js
-async function searchReferences() {
-  // futura llamada backend
-}
+No puede ejecutar directamente:
+
+- JavaFX,
+- Java,
+- Python,
+- MediaPipe,
+- Playwright,
+- scraping de servidor,
+- ni lógica nativa de backend.
+
+Por eso la transición correcta es:
+
+```text
+GitHub Pages (frontend estático real)
+        ↓
+Backend FastAPI / Python actual
+        ↓
+Motor Python: MediaPipe + Playwright + similarity engine
 ```
 
-La idea objetivo es:
+## JPro: análisis realista
 
-`frontend (GitHub Pages)` -> `backend API (FastAPI o Node)`
+JPro sí puede ser útil para renderizar una app JavaFX en navegador, pero tiene una limitación importante:
 
-## Activar GitHub Pages
+- puede ayudar a mostrar la UI JavaFX actual,
+- pero **no sustituye** el backend Python/MediaPipe/Playwright.
 
-En GitHub:
+En este proyecto, JPro sería válido solo si el cálculo pesado se mantiene fuera del navegador, por ejemplo:
 
-1. Ir a `Settings` -> `Pages`.
-2. En `Build and deployment`, elegir `Deploy from a branch`.
-3. Seleccionar rama `main` (o la que uses) y carpeta `/docs`.
-4. Guardar.
+- JavaFX en el cliente web,
+- backend remoto para análisis y búsqueda,
+- y el frontend JavaFX hablando con esa API.
 
-## Nota
+Eso significa que **JPro no resuelve por sí solo** toda la app real; la arquitectura híbrida sigue siendo necesaria.
 
-GitHub Pages no ejecuta Python/MediaPipe/scraping. Este frontend solo presenta UI base y mocks visuales.
+## Recomendación de despliegue
 
-## Ruta profesional recomendada (sin reescritura)
+### Opción A: híbrida recomendada
 
-- Mantener JavaFX desktop como canal principal.
-- Publicar version navegador con JPro (perfil Maven `jpro`).
-- Usar `docs/` solo como landing/fallback mientras madura el despliegue JPro.
+```text
+Frontend web responsive en GitHub Pages
+        ↓
+Backend FastAPI desplegado aparte
+        ↓
+Python + MediaPipe + Playwright + caché + similarity engine
+```
+
+Ventajas:
+
+- cero reescritura total,
+- máxima reutilización del motor actual,
+- funciona en navegador,
+- escalable y mantenible.
+
+### Opción B: JPro + backend remoto
+
+```text
+JavaFX renderizado con JPro
+        ↓
+Backend Python remoto
+```
+
+Ventajas:
+
+- reutiliza FXML y controllers JavaFX,
+- minimiza cambios en UI desktop.
+
+Desventajas:
+
+- depende de licencia/infraestructura JPro,
+- no elimina la necesidad del backend externo,
+- no es ideal para GitHub Pages puro.
+
+## Cómo usar esta web
+
+1. Publica `docs/` en GitHub Pages.
+2. Despliega el backend FastAPI en un hosting con HTTPS.
+3. Introduce la URL pública del backend en la barra superior.
+4. Dibuja una pose en el canvas.
+5. Pulsa `Analizar dibujo`.
+6. Pulsa `Buscar referencias reales`.
+
+## Archivos clave
+
+- `index.html`: estructura web real.
+- `style.css`: diseño responsive.
+- `app.js`: canvas, análisis de color, conexión API y galería.
+- `WEB_TRANSITION.md`: análisis completo de transición y reutilización.
 

@@ -115,12 +115,16 @@ Para que el sistema funcione correctamente, se necesita:
 - [x] Panel de búsqueda "menos visual" (colapsable) para priorizar el lienzo y la galería.
 - [x] Carga asíncrona de miniaturas en la galería para evitar bloqueos.
 
-### 🌐 Despliegue en la Web (GitHub Pages)
-Aunque el proyecto es una aplicación de escritorio JavaFX, se puede lanzar como página web en GitHub de la siguiente manera:
-1.  **Tecnología**: Usaríamos **JPro** o **CheerpJ**. Estas herramientas permiten que el código Java se ejecute en el navegador convirtiéndolo a WebAssembly/HTML5.
-2.  **GitHub Actions**: Configuraríamos un flujo de trabajo automático que, al subir cambios, compile el proyecto para la web.
-3.  **Alojamiento**: GitHub Pages alojaría los archivos estáticos generados.
-4.  **Ventaja**: El usuario no tendría que instalar Java en su ordenador para usar el buscador.
+### 🌐 Despliegue en la Web (arquitectura real)
+La versión web del proyecto no puede depender solo de GitHub Pages, porque Pages solo sirve archivos estáticos.
+
+La estrategia correcta es híbrida:
+
+1.  **Frontend estático en GitHub Pages**: se publica `docs/` como interfaz responsive real.
+2.  **Backend externo**: FastAPI + Python siguen ejecutándose fuera de Pages.
+3.  **Motor visual real**: el backend mantiene MediaPipe, Playwright, scraping y similarity engine.
+4.  **JPro como opción adicional**: puede reutilizar la UI JavaFX en navegador, pero no sustituye al backend Python.
+5.  **Ventaja**: se conserva el trabajo desktop y la web muestra resultados reales sin rehacer el proyecto desde cero.
 
 ### 🔑 Autenticación y Cuentas (Login con GitHub)
 Para que cada usuario pueda guardar sus dibujos y búsquedas, se podría implementar un sistema de **Login con GitHub (OAuth2)**:

@@ -1,4 +1,4 @@
-name: JPro Web Build (manual)
+name: Web Transition Readiness (manual)
 
 on:
   workflow_dispatch:
@@ -21,10 +21,10 @@ jobs:
       - name: Verify desktop build is healthy
         run: ./mvnw -B -DskipTests clean package
 
-      - name: JPro integration checklist
+      - name: Web transition summary
         run: |
-          echo "JPro workflow plantilla lista." >> $GITHUB_STEP_SUMMARY
-          echo "1) Activar licencia JPro (secret JPRO_LICENSE)." >> $GITHUB_STEP_SUMMARY
-          echo "2) Añadir plugin/dependencias JPro en un perfil Maven dedicado." >> $GITHUB_STEP_SUMMARY
-          echo "3) Sustituir este job por 'mvn -Pjpro ... jpro:build'." >> $GITHUB_STEP_SUMMARY
+          echo "Desktop JavaFX build OK." >> $GITHUB_STEP_SUMMARY
+          echo "La web real del proyecto vive en docs/ y consume el backend FastAPI existente." >> $GITHUB_STEP_SUMMARY
+          echo "JPro puede evaluarse como vía adicional para reutilizar FXML/controllers, pero no reemplaza Python/MediaPipe/Playwright." >> $GITHUB_STEP_SUMMARY
+          echo "Arquitectura objetivo: GitHub Pages -> backend REST -> motor Python." >> $GITHUB_STEP_SUMMARY
 

@@ -137,7 +137,7 @@ function renderResults(results) {
     card.tabIndex = 0;
 
     const img = document.createElement("img");
-    img.src = item.cachedPath || item.thumbnailUrl || item.thumbnail_url || item.originalUrl || item.sourceUrl || "";
+    img.src = item.thumbnailUrl || item.thumbnail_url || item.originalUrl || item.sourceUrl || item.cachedPath || "";
     img.alt = item.title || item.provider || "Referencia";
     img.loading = "lazy";
 
@@ -269,6 +269,8 @@ function resizeCanvas() {
     drawCanvasFrame();
   }
 
+  state.undoStack.length = 0;
+  state.redoStack.length = 0;
   state.canvasReady = true;
 }
 
@@ -329,6 +331,7 @@ function beginStroke(event) {
   state.pointerId = event.pointerId;
   els.referenceCanvas.setPointerCapture(event.pointerId);
   state.lastPoint = canvasPoint(event);
+  state.redoStack.length = 0;
   pushUndoSnapshot();
   event.preventDefault();
 }
@@ -494,6 +497,7 @@ async function fetchJson(path, options = {}) {
     }
     if (!response.ok) {
       const error = new Error(`HTTP ${response.status}`);
+      error.status = response.status;
       error.response = body;
       throw error;
     }
@@ -577,7 +581,7 @@ async function searchWithBackend() {
       return;
     } catch (error) {
       lastError = error;
-      if (error?.response && String(error.response).includes("HTTP 404")) {
+      if (error?.status === 404 || error?.message === "HTTP 404") {
         continue;
       }
     }
@@ -600,6 +604,7 @@ function wireEvents() {
   els.clearButton.addEventListener("click", () => {
     pushUndoSnapshot();
     clearCanvas();
+    state.redoStack.length = 0;
     state.pose = null;
     state.terms = [];
     updateTermsList([]);
