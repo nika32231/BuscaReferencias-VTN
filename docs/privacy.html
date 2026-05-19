@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BuscaReferencias VTN - Política de privacidad</title>
+    <meta
+      name="description"
+      content="Política de privacidad de BuscaReferencias VTN para la web y el backend híbrido."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="legal-page">
+    <header class="topbar">
+      <div class="brand-block">
+        <p class="badge">Información legal</p>
+        <h1>Política de privacidad</h1>
+        <p class="subtitle">
+          Esta página explica qué datos se usan en BuscaReferencias VTN, cómo se procesan y qué opciones tienes.
+        </p>
+      </div>
+
+      <div class="connection-panel">
+        <label class="field-label">Navegación</label>
+        <div class="connection-row legal-nav-row">
+          <a class="primary" href="index.html">← Volver a la app</a>
+          <a class="tool-button" href="README.md">Ver documentación</a>
+        </div>
+        <div class="status-row">
+          <span class="badge badge-neutral">Frontend estático</span>
+          <span class="muted">Aplicable a la versión web publicada en GitHub Pages.</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="layout legal-layout">
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Resumen rápido</h2>
+          <p class="muted">Versión breve y clara.</p>
+        </div>
+        <p>
+          BuscaReferencias VTN no está pensada para recopilar datos personales sensibles de forma deliberada.
+          La app web solo guarda en tu navegador configuraciones básicas como la URL del backend y la parte anatómica activa.
+        </p>
+        <p>
+          Cuando realizas búsquedas, el frontend envía al backend los términos generados desde tu dibujo y, si existe,
+          la información de pose necesaria para calcular similitud. Ese intercambio se usa únicamente para mostrar referencias.
+        </p>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Datos que se utilizan</h2>
+          <p class="muted">Solo lo necesario para que funcione la búsqueda.</p>
+        </div>
+        <ul class="legal-list">
+          <li><strong>Preferencias locales:</strong> URL del backend, parte anatómica activa y estado de la interfaz.</li>
+          <li><strong>Términos de búsqueda:</strong> palabras generadas desde el canvas para encontrar referencias reales.</li>
+          <li><strong>Datos técnicos temporales:</strong> caché de miniaturas, sesión de búsqueda y resultados mostrados.</li>
+          <li><strong>Metadatos de imágenes:</strong> miniatura, URL original, autor, página de origen y similitud.</li>
+        </ul>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Cómo se procesan las imágenes</h2>
+          <p class="muted">Flujo principal de la app.</p>
+        </div>
+        <ol class="legal-list legal-list-ordered">
+          <li>El usuario dibuja una pose en el canvas.</li>
+          <li>La interfaz genera términos de búsqueda relacionados con anatomía, movimiento y postura.</li>
+          <li>El backend consulta proveedores online, como Pexels, y descarga miniaturas temporales.</li>
+          <li>MediaPipe analiza las imágenes para obtener embeddings, ángulos y similitud estructural.</li>
+          <li>La galería muestra miniaturas reales, porcentaje de similitud y enlace a la página original.</li>
+        </ol>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Cookies y almacenamiento local</h2>
+          <p class="muted">La web usa almacenamiento del navegador.</p>
+        </div>
+        <p>
+          La versión web puede usar <code>localStorage</code> para recordar la URL del backend y la parte anatómica activa.
+          No utilizamos cookies de seguimiento ni perfiles publicitarios desde este frontend.
+        </p>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Servicios de terceros</h2>
+          <p class="muted">Dependencias externas usadas para buscar referencias.</p>
+        </div>
+        <p>
+          La app puede consultar servicios externos como Pexels y otros proveedores configurados en el backend.
+          Cada proveedor tiene su propia política de privacidad y términos de uso.
+        </p>
+        <p>
+          Cuando haces clic en una miniatura, se abre la página original del proveedor para que puedas revisar la fuente.
+        </p>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Retención y caché</h2>
+          <p class="muted">Las miniaturas son temporales.</p>
+        </div>
+        <p>
+          Las imágenes descargadas para una búsqueda se almacenan solo de forma temporal en la sesión actual,
+          con el objetivo de acelerar la galería y el análisis por MediaPipe.
+        </p>
+        <p>
+          Al iniciar una nueva búsqueda, la caché temporal se limpia para evitar acumulación innecesaria.
+        </p>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Tus opciones</h2>
+          <p class="muted">Control básico desde el navegador.</p>
+        </div>
+        <ul class="legal-list">
+          <li>Puedes borrar el almacenamiento local del navegador para resetear la configuración.</li>
+          <li>Puedes cambiar la URL del backend en cualquier momento.</li>
+          <li>Puedes dejar de usar el servicio cerrando la página o desconectando el backend.</li>
+        </ul>
+      </section>
+
+      <section class="panel legal-panel">
+        <div class="section-title">
+          <h2>Contacto</h2>
+          <p class="muted">Sección orientativa.</p>
+        </div>
+        <p>
+          Si publicas este proyecto, añade aquí el correo o canal de contacto del responsable del sitio.
+          En esta plantilla se deja el apartado preparado para que puedas completarlo más adelante.
+        </p>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <small>
+        Última actualización: 2026-05-19 · <a href="index.html">Volver a la app</a>
+      </small>
+    </footer>
+  </body>
+</html>
+

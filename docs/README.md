@@ -112,6 +112,7 @@ Desventajas:
 ## Archivos clave
 
 - `index.html`: estructura web real.
+- `privacy.html`: política de privacidad del frontend web.
 - `style.css`: diseño responsive.
 - `app.js`: canvas, análisis de color, conexión API y galería.
 - `WEB_TRANSITION.md`: análisis completo de transición y reutilización.

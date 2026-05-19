@@ -392,6 +392,55 @@ body {
   text-align: center;
 }
 
+.footer-links {
+  display: block;
+  margin-top: 0.45rem;
+}
+
+.footer-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+.legal-page .layout {
+  grid-template-columns: 1fr;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.legal-panel {
+  line-height: 1.65;
+}
+
+.legal-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text);
+}
+
+.legal-list li + li {
+  margin-top: 0.6rem;
+}
+
+.legal-list-ordered {
+  padding-left: 1.4rem;
+}
+
+.legal-nav-row {
+  grid-template-columns: auto auto;
+}
+
+.legal-nav-row a {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 1180px) {
   .topbar {
     grid-template-columns: 1fr;

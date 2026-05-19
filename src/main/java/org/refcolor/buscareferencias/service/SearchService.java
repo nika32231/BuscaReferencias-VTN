@@ -153,10 +153,44 @@ public class SearchService {
     }
 
     private static List<ImageResult> fetchStructuredResults(List<String> terms, int limit) {
-        try (PlaywrightScraper scraper = new PlaywrightScraper()) {
-            return scraper.searchVisualReferences(terms, limit, DEFAULT_PROVIDERS);
+        List<ImageResult> aggregated = new ArrayList<>();
+        try {
+            // 1) Intentar API oficial de Pexels (priorizar portrait / people)
+            try {
+                List<ImageResult> pex = PexelsService.searchImages(terms, Math.min(limit, 80), "portrait", null);
+                if (pex != null && !pex.isEmpty()) {
+                    aggregated.addAll(pex);
+                }
+            } catch (Exception e) {
+                logger.debug("PexelsService falló: {}", e.toString());
+            }
+
+            // 2) Si no alcanzamos, fallback a PlaywrightScraper para extraer thumbnails reales
+            if (aggregated.size() < Math.min(10, limit)) {
+                try (PlaywrightScraper scraper = new PlaywrightScraper()) {
+                    List<ImageResult> play = scraper.searchVisualReferences(terms, limit, DEFAULT_PROVIDERS);
+                    if (play != null && !play.isEmpty()) {
+                        aggregated.addAll(play);
+                    }
+                } catch (Exception e) {
+                    logger.error("Error en PlaywrightScraper estructurado", e);
+                }
+            }
+
+            // Dedupe manteniendo orden
+            List<ImageResult> out = new ArrayList<>();
+            var seen = new java.util.HashSet<String>();
+            for (ImageResult ir : aggregated) {
+                String key = ir.getOriginalUrl() == null || ir.getOriginalUrl().isBlank() ? ir.getThumbnailUrl() : ir.getOriginalUrl();
+                if (key == null) continue;
+                if (seen.add(key)) {
+                    out.add(ir);
+                    if (out.size() >= limit) break;
+                }
+            }
+            return out;
         } catch (Exception e) {
-            logger.error("Error en PlaywrightScraper estructurado", e);
+            logger.error("Error agregando proveedores estructurados", e);
             return List.of();
         }
     }
