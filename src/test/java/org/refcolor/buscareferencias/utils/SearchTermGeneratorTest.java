@@ -8,68 +8,38 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public class SearchTermGeneratorTest {
+class SearchTermGeneratorTest {
 
     @Test
-    public void testGenerateTermsFullBody() {
+    void fullBodyTermsAreLocalDescriptions() {
         PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.HEAD, 300, 50);
-        pose.addJoint(AnatomyPart.TORSO, 300, 200);
-        pose.addJoint(AnatomyPart.FEET, 300, 450);
-        pose.addJoint(AnatomyPart.THIGHS, 300, 300); // Asegura hasLegs -> full body
+        pose.addJoint(AnatomyPart.HEAD, 0.5, 0.1);
+        pose.addJoint(AnatomyPart.TORSO, 0.5, 0.4);
+        pose.addJoint(AnatomyPart.THIGHS, 0.5, 0.6);
+        pose.addJoint(AnatomyPart.FEET, 0.5, 0.9);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        // Debug
-        // terms.forEach(System.out::println);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("full body") && t.contains("google")));
+        assertTrue(terms.stream().anyMatch(t -> t.contains("cuerpo completo")));
+        assertFalse(terms.stream().anyMatch(t -> t.contains("google") || t.contains("pinterest") || t.contains("pexels")));
     }
 
     @Test
-    public void testGenerateTermsArmsRaised() {
+    void armsRaisedTerm() {
         PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.HEAD, 300, 100);
-        pose.addJoint(AnatomyPart.HANDS, 300, 50); // Manos arriba de la cabeza
+        pose.addJoint(AnatomyPart.HEAD, 0.5, 0.4);
+        pose.addJoint(AnatomyPart.HANDS, 0.5, 0.1);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("arms raised") && t.contains("pinterest")));
+        assertTrue(terms.stream().anyMatch(t -> t.contains("brazos levantados")));
     }
 
     @Test
-    public void testGenerateTermsSitting() {
+    void sittingPostureUsesNormalizedCoords() {
         PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.TORSO, 300, 200);
-        pose.addJoint(AnatomyPart.FEET, 300, 300); // Distancia vertical 100 (< 120)
+        pose.addJoint(AnatomyPart.TORSO, 0.5, 0.4);
+        pose.addJoint(AnatomyPart.FEET, 0.5, 0.55);
 
         List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("sitting") && t.contains("reference")));
-    }
-
-    @Test
-    public void testGenerateTermsUpperBody() {
-        PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.HEAD, 300, 50);
-        pose.addJoint(AnatomyPart.TORSO, 300, 200);
-
-        List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("upper body") && t.contains("google")));
-        assertFalse(terms.stream().anyMatch(t -> t.contains("full body")));
-    }
-
-    @Test
-    public void testGenerateTermsWithArms() {
-        PoseData pose = new PoseData();
-        pose.addJoint(AnatomyPart.TORSO, 300, 200);
-        pose.addJoint(AnatomyPart.HANDS, 300, 100);
-
-        List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("arms up") && t.contains("pinterest")));
-    }
-
-    @Test
-    public void testGenerateTermsGeneric() {
-        PoseData pose = new PoseData();
-
-        List<String> terms = SearchTermGenerator.generateTerms(pose);
-        assertTrue(terms.stream().anyMatch(t -> t.contains("anatomy") && t.contains("google")));
+        assertTrue(terms.stream().anyMatch(t -> t.contains("sentado")));
     }
 }

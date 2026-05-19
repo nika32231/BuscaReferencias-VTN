@@ -14,7 +14,7 @@ class LocalThumbnailCacheTest {
 
     @Test
     void testPythonVersionReport() {
-        List<ImageResult> results = SearchService.searchWebThumbnailsOnly(List.of("pose reference"), 10);
+        List<ImageResult> results = SearchService.searchLocalPhotos(List.of("pose reference"), 10);
 
         assertNotNull(results, "La búsqueda no debería devolver null");
         assertFalse(results.isEmpty(), "La caché local debería contener al menos una miniatura");

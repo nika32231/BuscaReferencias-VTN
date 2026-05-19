@@ -3,9 +3,12 @@ package org.refcolor.buscareferencias.service;
 import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.service.MediaPipeService.ImageCacheService;
+import org.refcolor.buscareferencias.utils.LocalImagePaths;
+import org.refcolor.buscareferencias.utils.PoseToleranceConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -20,61 +23,50 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Servicio de búsqueda local de imágenes.
+ * Búsqueda local de fotos de referencia por similitud de pose (MediaPipe).
  */
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);
     private static final ExecutorService executor = Executors.newFixedThreadPool(Math.max(4, Runtime.getRuntime().availableProcessors() / 2));
-
-    private static final int MAX_RESULTS_PER_SEARCH = 100;
-    private static final int ANALYSIS_LIMIT = 24;
+    private static final int ANALYSIS_LIMIT = 200;
 
     public static List<ImageResult> searchImages(List<String> terms, PoseData drawingPose) {
         List<String> normalizedTerms = normalizeTerms(terms);
         logger.info("Iniciando búsqueda local para: {}", normalizedTerms);
-        return searchLocalImages(normalizedTerms, drawingPose, ANALYSIS_LIMIT);
+        return searchLocalImages(normalizedTerms, drawingPose);
     }
 
     /**
-     * Mantiene la firma histórica, pero ahora devuelve únicamente fotos locales.
+     * Devuelve fotos locales sin comparar pose (orden por fecha de archivo).
      */
-    public static List<ImageResult> searchWebThumbnailsOnly(List<String> terms, int limit) {
+    public static List<ImageResult> searchLocalPhotos(List<String> terms, int limit) {
         List<String> normalizedTerms = normalizeTerms(terms);
-        return searchLocalImages(normalizedTerms, null, Math.max(1, Math.min(MAX_RESULTS_PER_SEARCH, limit)));
+        int capped = Math.max(PoseToleranceConfig.minResults(), Math.min(limit, PoseToleranceConfig.maxResults()));
+        return finalizeResults(
+                prepareForDisplay(loadLocalCandidates(capped * 2), normalizedTerms, capped),
+                false
+        );
     }
 
-    private static List<ImageResult> searchLocalImages(List<String> terms, PoseData drawingPose, int limit) {
-        List<ImageResult> discovered = loadLocalCandidates(limit);
+    private static List<ImageResult> searchLocalImages(List<String> terms, PoseData drawingPose) {
+        List<ImageResult> discovered = loadLocalCandidates(ANALYSIS_LIMIT);
         if (discovered.isEmpty()) {
-            logger.warn("No se encontraron imágenes locales en cache/thumbnails.");
+            logger.warn("No se encontraron imágenes locales en {}.", PoseToleranceConfig.localImageDir());
             return List.of();
         }
 
         if (drawingPose == null || drawingPose.getAllJoints().isEmpty()) {
-            return prepareForDisplay(discovered, terms, Math.min(limit, discovered.size()));
+            return finalizeResults(
+                    prepareForDisplay(discovered, terms, PoseToleranceConfig.maxResults()),
+                    false
+            );
         }
 
         List<Future<ImageResult>> futures = new ArrayList<>();
-        int maxToAnalyze = Math.min(discovered.size(), limit);
+        int maxToAnalyze = Math.min(discovered.size(), ANALYSIS_LIMIT);
         for (int i = 0; i < maxToAnalyze; i++) {
             ImageResult candidate = discovered.get(i);
-            futures.add(executor.submit(() -> {
-                String analysisSource = firstNonBlank(candidate.getOriginalUrl(), candidate.getThumbnailUrl(), candidate.getSourcePageUrl());
-                PoseData imagePose = null;
-                double score = candidate.getScore();
-
-                if (canAnalyzeImage(analysisSource)) {
-                    imagePose = MediaPipeService.analyzeImage(analysisSource);
-                    score = MediaPipeService.calculateSimilarity(drawingPose, imagePose);
-                    logger.info("[SIMILARITY] Score calculated {} for {}", String.format("%.4f", score), analysisSource);
-                }
-
-                ImageResult scored = buildDisplayResult(candidate, score, imagePose, String.join(" ", terms));
-                if (imagePose != null) {
-                    scored.setPoseData(imagePose);
-                }
-                return scored;
-            }));
+            futures.add(executor.submit(() -> scoreCandidate(candidate, drawingPose, terms)));
         }
 
         List<ImageResult> results = new ArrayList<>();
@@ -86,15 +78,99 @@ public class SearchService {
             }
         }
 
-        results.sort((a, b) -> Double.compare(b.getScore(), a.getScore()));
-        logger.info("Búsqueda local completada. {} imágenes procesadas.", results.size());
-        return results;
+        List<ImageResult> finalized = finalizeResults(results, true);
+        logger.info("Búsqueda local completada. {} imágenes mostradas.", finalized.size());
+        return finalized;
+    }
+
+    private static ImageResult scoreCandidate(ImageResult candidate, PoseData drawingPose, List<String> terms) {
+        try {
+            String analysisSource = LocalImagePaths.toAbsolutePath(
+                    firstNonBlank(candidate.getOriginalUrl(), candidate.getThumbnailUrl(), candidate.getSourcePageUrl())
+            );
+            if (analysisSource == null) {
+                return buildDisplayResult(candidate, -1.0, null, String.join(" ", terms));
+            }
+
+            PoseData imagePose;
+            try {
+                imagePose = MediaPipeService.analyzeImage(analysisSource);
+            } catch (Exception e) {
+                logger.warn("[SEARCH] Error en análisis: {}", analysisSource);
+                return buildDisplayResult(candidate, -1.0, null, String.join(" ", terms));
+            }
+
+            double score = -1.0;
+            if (imagePose != null && !imagePose.getAllLandmarks().isEmpty()) {
+                score = MediaPipeService.calculateSimilarity(drawingPose, imagePose);
+                logger.info("[SIMILARITY] {} -> {}", String.format("%.4f", score), analysisSource);
+            } else {
+                logger.warn("[SEARCH] Pose vacía para: {}", analysisSource);
+            }
+
+            ImageResult scored = buildDisplayResult(candidate, score, imagePose, String.join(" ", terms));
+            if (imagePose != null) {
+                scored.setPoseData(imagePose);
+            }
+            return scored;
+        } catch (Exception e) {
+            logger.error("[SEARCH] Error inesperado: {}", e.toString());
+            return buildDisplayResult(candidate, -1.0, null, String.join(" ", terms));
+        }
+    }
+
+    /**
+     * Ordena por similitud y devuelve entre {@link PoseToleranceConfig#minResults()} y max.
+     * Si hay pocas coincidencias estrictas, relaja el umbral para llegar al mínimo.
+     */
+    static List<ImageResult> finalizeResults(List<ImageResult> results, boolean rankedBySimilarity) {
+        List<ImageResult> valid = results.stream()
+                .filter(r -> r.getScore() >= 0)
+                .sorted((a, b) -> Double.compare(b.getScore(), a.getScore()))
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        int min = PoseToleranceConfig.minResults();
+        int max = PoseToleranceConfig.maxResults();
+        double minScore = PoseToleranceConfig.minSimilarityScore();
+
+        List<ImageResult> picked = new ArrayList<>();
+        if (rankedBySimilarity) {
+            for (ImageResult r : valid) {
+                if (r.getScore() >= minScore) {
+                    picked.add(r);
+                }
+                if (picked.size() >= max) break;
+            }
+            if (picked.size() < min) {
+                picked.clear();
+                for (ImageResult r : valid) {
+                    picked.add(r);
+                    if (picked.size() >= min) break;
+                }
+            }
+        } else {
+            for (ImageResult r : valid) {
+                picked.add(r);
+                if (picked.size() >= max) break;
+            }
+        }
+
+        if (picked.size() > max) {
+            return new ArrayList<>(picked.subList(0, max));
+        }
+        return picked;
     }
 
     private static List<ImageResult> loadLocalCandidates(int limit) {
         List<ImageResult> results = new ArrayList<>();
-        Path cacheDir = Paths.get("cache", "thumbnails");
+        Path cacheDir = Paths.get(PoseToleranceConfig.localImageDir());
         if (!Files.isDirectory(cacheDir)) {
+            try {
+                Files.createDirectories(cacheDir);
+                logger.info("Carpeta de referencias creada: {}", cacheDir.toAbsolutePath());
+            } catch (Exception e) {
+                logger.warn("No se pudo crear la carpeta de fotos locales", e);
+            }
             return results;
         }
 
@@ -112,7 +188,9 @@ public class SearchService {
                 }
             });
 
-            for (Path path : files.stream().limit(Math.max(1, limit)).toList()) {
+            int cap = Math.max(1, limit);
+            for (int i = 0; i < Math.min(files.size(), cap); i++) {
+                Path path = files.get(i);
                 String uri = path.toUri().toString();
                 results.add(new ImageResult(uri, uri, uri, prettyTitle(path), 0.0, uri, "local", ""));
             }
@@ -130,7 +208,7 @@ public class SearchService {
 
         for (int i = 0; i < max; i++) {
             ImageResult candidate = candidates.get(i);
-            out.add(buildDisplayResult(candidate, candidate.getScore(), candidate.getPoseData(), query));
+            out.add(buildDisplayResult(candidate, Math.max(0, candidate.getScore()), candidate.getPoseData(), query));
         }
 
         return out;
@@ -138,7 +216,7 @@ public class SearchService {
 
     private static ImageResult buildDisplayResult(ImageResult candidate, double score, PoseData poseData, String queryOverride) {
         String thumbnailSource = firstNonBlank(candidate.getThumbnailUrl(), candidate.getDisplayThumbnailUrl(), candidate.getOriginalUrl());
-        String displayThumbnail = ImageCacheService.getLocalThumbnailPath(thumbnailSource);
+        String displayThumbnail = ImageCacheService.resolveLocalPath(thumbnailSource);
         String originalUrl = firstNonBlank(candidate.getOriginalUrl(), thumbnailSource, candidate.getSourcePageUrl());
         String sourcePageUrl = firstNonBlank(candidate.getSourcePageUrl(), originalUrl);
         String source = firstNonBlank(candidate.getSource(), "local");
@@ -186,30 +264,6 @@ public class SearchService {
         return "";
     }
 
-    /**
-     * Decide si podemos analizar la imagen con MediaPipe. Acepta rutas locales y URIs file:.
-     */
-    private static boolean canAnalyzeImage(String source) {
-        if (source == null || source.isBlank()) return false;
-        String s = source.trim();
-        if (s.startsWith("file:")) return true;
-
-        try {
-            Path p = Paths.get(s);
-            return Files.exists(p);
-        } catch (Exception e) {
-            try {
-                java.net.URI u = new java.net.URI(s);
-                if ("file".equalsIgnoreCase(u.getScheme())) {
-                    Path p = Paths.get(u);
-                    return Files.exists(p);
-                }
-            } catch (Exception ignored) {
-            }
-        }
-        return false;
-    }
-
     private static boolean looksLikeImage(Path path) {
         String name = path.getFileName().toString().toLowerCase();
         return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".webp") || name.endsWith(".gif");
@@ -226,7 +280,7 @@ public class SearchService {
 
         try {
             if (source.startsWith("file:")) {
-                return prettyTitle(Paths.get(java.net.URI.create(source)).getFileName().toString());
+                return prettyTitle(Paths.get(URI.create(source)).getFileName().toString());
             }
             Path path = Paths.get(source);
             Path fileName = path.getFileName();

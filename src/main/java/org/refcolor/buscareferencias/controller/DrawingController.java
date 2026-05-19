@@ -16,6 +16,7 @@ import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
@@ -509,37 +510,56 @@ public class DrawingController {
     }
 
     @FXML
-    private void handleWebSearch() {
-        if (termsListView.getItems() == null || termsListView.getItems().isEmpty()) {
-            statusLabel.setText("No hay términos para buscar. Añade uno o analiza el dibujo.");
-            return;
-        }
-
-        statusLabel.setText("Buscando fotos locales...");
+    private void handleLocalPhotoSearch() {
+        statusLabel.setText("Buscando en fotos locales...");
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         galleryPane.getChildren().clear();
 
-        List<String> terms = new ArrayList<>(termsListView.getItems());
+        javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
+        params.setFill(Color.TRANSPARENT);
+        final WritableImage snapshot = canvas.snapshot(params, null);
+
+        List<String> terms = termsListView.getItems() == null
+                ? new ArrayList<>()
+                : new ArrayList<>(termsListView.getItems());
 
         Task<List<ImageResult>> searchTask = new Task<>() {
             @Override
             protected List<ImageResult> call() {
-                if (lastAnalyzedPose != null && !lastAnalyzedPose.getAllJoints().isEmpty()) {
-                    return SearchService.searchImages(terms, lastAnalyzedPose);
+                PoseData pose = lastAnalyzedPose;
+                if (pose == null || pose.getAllJoints().isEmpty()) {
+                    pose = DrawingProcessor.processImage(snapshot);
                 }
-                return SearchService.searchWebThumbnailsOnly(terms, 24);
+                if (terms.isEmpty() && pose != null && !pose.getAllJoints().isEmpty()) {
+                    terms.addAll(SearchTermGenerator.generateTerms(pose));
+                }
+                if (pose != null && !pose.getAllJoints().isEmpty()) {
+                    return SearchService.searchImages(terms, pose);
+                }
+                return SearchService.searchLocalPhotos(terms, org.refcolor.buscareferencias.utils.PoseToleranceConfig.maxResults());
             }
         };
 
         searchTask.setOnSucceeded(e -> {
+            PoseData poseFromTask = lastAnalyzedPose;
+            if (poseFromTask == null || poseFromTask.getAllJoints().isEmpty()) {
+                PoseData analyzed = DrawingProcessor.processImage(snapshot);
+                if (!analyzed.getAllJoints().isEmpty()) {
+                    lastAnalyzedPose = analyzed;
+                    if (termsListView.getItems().isEmpty()) {
+                        termsListView.getItems().setAll(SearchTermGenerator.generateTerms(analyzed));
+                    }
+                }
+            }
+
             List<ImageResult> results = searchTask.getValue();
             displayResults(results);
             progressBar.setVisible(false);
             if (results.isEmpty()) {
-                statusLabel.setText("No se encontraron fotos locales. Revisa la carpeta de referencias.");
+                statusLabel.setText("Sin resultados. Añade fotos en cache/thumbnails y analiza el dibujo.");
             } else {
-                statusLabel.setText("OK: " + results.size() + " referencias cargadas en galería.");
+                statusLabel.setText(String.format("OK: %d fotos (ordenadas por similitud).", results.size()));
                 if (currentSearchId != -1) {
                     DatabaseManager.saveResults(currentSearchId, results);
                 }
@@ -557,10 +577,15 @@ public class DrawingController {
 
     private void displayResults(List<ImageResult> results) {
         applyGalleryResponsiveLayout();
+        if (results == null || results.isEmpty()) {
+            return;
+        }
+
+        int rank = 1;
         for (ImageResult result : results) {
             VBox card = new VBox(5);
             card.getStyleClass().add("image-card");
-            card.setAlignment(javafx.geometry.Pos.CENTER);
+            card.setAlignment(Pos.CENTER);
             card.setPrefWidth(currentGalleryImageSize + 10);
             card.setPrefHeight(currentGalleryImageSize + 56);
 
@@ -584,14 +609,19 @@ public class DrawingController {
                 logger.warn("Error al instanciar imagen: {}", result.getThumbnailUrl());
             }
 
+            Label rankBadge = new Label(String.valueOf(rank));
+            rankBadge.getStyleClass().add("gallery-rank");
+            StackPane imageStack = new StackPane(iv, rankBadge);
+            StackPane.setAlignment(rankBadge, Pos.TOP_LEFT);
+
             Label label;
             if (result.getScore() <= 0.0) {
-                label = new Label(result.getTitle() == null || result.getTitle().isBlank() ? "Thumbnail" : result.getTitle());
+                label = new Label(String.format("#%d · %s", rank,
+                        result.getTitle() == null || result.getTitle().isBlank() ? "Referencia" : result.getTitle()));
                 label.setStyle("-fx-font-size: 12px; -fx-text-fill: #b9beca;");
             } else {
                 double scorePercent = result.getScore() * 100;
-                // Mostrar porcentaje simple (ej: 87%) con color según umbral
-                label = new Label(String.format("%.0f%%", scorePercent));
+                label = new Label(String.format("#%d · %.0f%%", rank, scorePercent));
                 if (scorePercent >= 60) {
                     label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;");
                 } else {
@@ -599,19 +629,16 @@ public class DrawingController {
                 }
             }
 
-            card.getChildren().addAll(iv, label);
-            card.setCursor(javafx.scene.Cursor.HAND);
-            String tooltipText = buildTooltip(result);
-            Tooltip.install(card, new Tooltip(tooltipText));
+            card.getChildren().addAll(imageStack, label);
+            card.setCursor(Cursor.HAND);
+            Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
 
-            card.setOnMouseClicked(e -> {
-                openResultSource(result);
-            });
-
+            card.setOnMouseClicked(e -> openResultSource(result));
             galleryPane.getChildren().add(card);
+            rank++;
         }
         refreshGalleryCardsSize();
-        logger.info("[GALLERY] Results rendered: {} items", results == null ? 0 : results.size());
+        logger.info("[GALLERY] Results rendered: {} items", results.size());
     }
 
     @FXML
@@ -723,14 +750,14 @@ public class DrawingController {
         }
     }
 
-    private String buildTooltip(ImageResult result) {
+    private String buildTooltip(ImageResult result, int rank) {
         StringBuilder sb = new StringBuilder();
+        sb.append("Posición: #").append(rank);
         if (result.getTitle() != null && !result.getTitle().isBlank()) {
-            sb.append(result.getTitle());
+            sb.append("\n").append(result.getTitle());
         }
         if (result.getScore() > 0.0) {
-            if (sb.length() > 0) sb.append("\n");
-            sb.append(String.format("Similitud: %.0f%%", result.getScore() * 100.0));
+            sb.append("\n").append(String.format("Similitud: %.0f%%", result.getScore() * 100.0));
         }
         if (result.getSource() != null && !result.getSource().isBlank()) {
             if (sb.length() > 0) sb.append("\n");
@@ -745,42 +772,29 @@ public class DrawingController {
             if (sb.length() > 0) sb.append("\n");
             sb.append(sourcePageUrl);
         }
-        if (sb.length() == 0) {
-            sb.append("Haz clic para abrir la fuente original");
-        } else {
-            sb.append("\nHaz clic para abrir la fuente original");
-        }
+        sb.append("\nHaz clic para abrir el archivo local");
         return sb.toString();
     }
 
     private void openResultSource(ImageResult result) {
-        String target = result.getSourcePageUrl();
+        String target = result.getOriginalUrl();
         if (target == null || target.isBlank()) {
-            target = result.getOriginalUrl();
+            target = result.getDisplayThumbnailUrl();
         }
-
         if (target == null || target.isBlank()) {
-            logger.warn("No hay URL de destino para abrir en la galería.");
+            logger.warn("No hay ruta local para abrir en la galería.");
             return;
         }
 
         try {
-            if (hostServices != null) {
-                hostServices.showDocument(target);
-                return;
-            }
-        } catch (Exception e) {
-            logger.warn("HostServices falló al abrir {}, intentando Desktop", target, e);
-        }
-
-        try {
             if (Desktop.isDesktopSupported()) {
-                Desktop.getDesktop().browse(new URI(target));
-            } else {
-                logger.warn("Desktop no soportado en este entorno: {}", target);
+                java.nio.file.Path path = target.startsWith("file:")
+                        ? java.nio.file.Paths.get(URI.create(target))
+                        : java.nio.file.Paths.get(target);
+                Desktop.getDesktop().open(path.toFile());
             }
         } catch (Exception e) {
-            logger.error("No se pudo abrir la URL: {}", target, e);
+            logger.error("No se pudo abrir el archivo local: {}", target, e);
         }
     }
 

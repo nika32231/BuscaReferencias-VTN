@@ -170,6 +170,15 @@
     -fx-padding: 10;
 }
 
+.gallery-rank {
+    -fx-background-color: rgba(20, 24, 32, 0.85);
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-padding: 4 8 4 8;
+    -fx-background-radius: 6;
+}
+
 .image-card {
     -fx-padding: 10;
     -fx-border-color: #2d323a;

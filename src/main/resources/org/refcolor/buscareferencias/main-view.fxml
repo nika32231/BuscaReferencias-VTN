@@ -25,7 +25,7 @@
                     <Separator orientation="VERTICAL"/>
                     <Button text="🔍 Analizar Pose" onAction="#handleSearch" styleClass="analyze-button"/>
                     <Separator orientation="VERTICAL"/>
-                    <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" styleClass="search-button-large"/>
+                    <Button text="🔍 Buscar en fotos" onAction="#handleLocalPhotoSearch" styleClass="search-button-large"/>
                 </ToolBar>
             </content>
         </ScrollPane>
@@ -89,7 +89,7 @@
                             <TextField fx:id="newTermField" promptText="Nuevo término..." HBox.hgrow="ALWAYS"/>
                             <Button text="+" onAction="#handleAddTerm"/>
                         </HBox>
-                        <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" maxWidth="Infinity" styleClass="search-button-large"/>
+                        <Button text="🔍 Buscar en fotos" onAction="#handleLocalPhotoSearch" maxWidth="Infinity" styleClass="search-button-large"/>
                     </VBox>
                 </TitledPane>
             </VBox>

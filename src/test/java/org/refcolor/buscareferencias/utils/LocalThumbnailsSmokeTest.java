@@ -18,7 +18,7 @@ public class LocalThumbnailsSmokeTest {
 
     @Test
     void busquedaLocal_devuelveResultados_o_cache() {
-        List<ImageResult> results = SearchService.searchWebThumbnailsOnly(List.of("human pose reference"), 5);
+        List<ImageResult> results = SearchService.searchLocalPhotos(List.of("human pose reference"), 5);
 
         assertNotNull(results, "La búsqueda no devolvió lista");
         assertFalse(results.isEmpty(), "No se obtuvieron resultados ni siquiera desde la caché local");

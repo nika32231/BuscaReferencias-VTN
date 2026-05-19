@@ -4,7 +4,6 @@ module org.refcolor.buscareferencias {
     requires java.desktop;
     requires java.logging;
     requires java.sql;
-    requires java.net.http;
     requires org.xerial.sqlitejdbc;
     requires org.slf4j;
 

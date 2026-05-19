@@ -4,26 +4,20 @@ import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.database.DatabaseManager;
 import org.refcolor.buscareferencias.client.PythonImageSearchClient;
+import org.refcolor.buscareferencias.utils.LocalImagePaths;
+import org.refcolor.buscareferencias.utils.PoseToleranceConfig;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
-import java.time.Duration;
-import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.Paths;
-import java.security.MessageDigest;
-import java.net.HttpURLConnection;
 
 /**
  * Servicio para la integración de MediaPipe.
@@ -33,156 +27,21 @@ public class MediaPipeService {
     // Caché temporal en memoria durante la sesión de búsqueda para evitar re-análisis
     private static final java.util.concurrent.ConcurrentMap<String, PoseData> SESSION_POSE_CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     /**
-     * Servicio para descargar y cachear imágenes localmente para generar miniaturas reales.
+     * Resolución de rutas locales para miniaturas (sin descargas HTTP).
      */
     public static class ImageCacheService {
-        private static final String CACHE_DIR = "cache/thumbnails";
-        // Directorio usado solo para la búsqueda/ sesión actual. Se limpia al iniciar una nueva búsqueda.
-        private static volatile String SESSION_CACHE_DIR = null; // e.g. "cache/current_search"
-        private static final long CACHE_TTL_DAYS = 7;
 
-        static {
-            try {
-                Files.createDirectories(Paths.get(CACHE_DIR));
-                cleanupExpiredCacheFiles();
-            } catch (Exception e) {
-                logger.error("No se pudo crear el directorio de caché", e);
-            }
-        }
-
-        /**
-         * Inicia una nueva sesión de búsqueda. Esto crea y limpia el directorio
-         * temporal usado para almacenar miniaturas de la búsqueda actual.
-         * Llamar antes de iniciar una nueva sesión para evitar acumular imágenes.
-         */
         public static synchronized void startSessionCache() {
-            try {
-                SESSION_CACHE_DIR = "cache/current_search";
-                Path sessionPath = Paths.get(SESSION_CACHE_DIR);
-                if (Files.exists(sessionPath)) {
-                    // Borrar contenido existente (no eliminar el directorio en sí)
-                    try (var stream = Files.list(sessionPath)) {
-                        stream.filter(Files::isRegularFile).forEach(p -> {
-                            try { Files.deleteIfExists(p); } catch (Exception ignored) {}
-                        });
-                    } catch (Exception ignored) {}
-                } else {
-                    Files.createDirectories(sessionPath);
-                }
-                // Al iniciar nueva sesión de caché también limpiamos la caché de poses en memoria
-                try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
-            } catch (Exception e) {
-                logger.warn("No se pudo iniciar sesión de caché temporal: {}", e.toString());
-            }
+            try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
         }
 
-        /**
-         * Limpia (elimina) el directorio de la sesión actual si existe.
-         */
         public static synchronized void clearSessionCache() {
-            if (SESSION_CACHE_DIR == null) return;
-            try {
-                Path sessionPath = Paths.get(SESSION_CACHE_DIR);
-                if (Files.isDirectory(sessionPath)) {
-                    try (var stream = Files.list(sessionPath)) {
-                        stream.filter(Files::isRegularFile).forEach(p -> {
-                            try { Files.deleteIfExists(p); } catch (Exception ignored) {}
-                        });
-                    } catch (Exception ignored) {}
-                }
-            } catch (Exception e) {
-                logger.debug("Error limpiando session cache: {}", e.toString());
-            } finally {
-                SESSION_CACHE_DIR = null;
-            }
+            try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
         }
 
-        public static String getLocalThumbnailPath(String imageUrl) {
-            if (imageUrl == null || imageUrl.isEmpty()) return null;
-            if (!imageUrl.startsWith("http")) return imageUrl;
-
-            try {
-                String hash = hashUrl(imageUrl);
-                // Si existe una sesión activa usamos su directorio para almacenar las miniaturas
-                Path cachedFile = SESSION_CACHE_DIR != null
-                        ? Paths.get(SESSION_CACHE_DIR, hash + ".jpg")
-                        : Paths.get(CACHE_DIR, hash + ".jpg");
-
-                if (Files.exists(cachedFile)) {
-                    return cachedFile.toUri().toString();
-                }
-
-                HttpURLConnection conn = (HttpURLConnection) new URL(imageUrl).openConnection();
-                conn.setRequestProperty("User-Agent", "Mozilla/5.0");
-                conn.setConnectTimeout(5000);
-                conn.setReadTimeout(5000);
-
-                try (InputStream in = conn.getInputStream();
-                     OutputStream out = Files.newOutputStream(cachedFile)) {
-                    byte[] buffer = new byte[8192];
-                    int bytesRead;
-                    while ((bytesRead = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, bytesRead);
-                    }
-                }
-                // Enforce maximum files en el directorio de caché objetivo (sesión o global)
-                try {
-                    Path dir = cachedFile.getParent();
-                    try (var stream = Files.list(dir)) {
-                        List<Path> files = stream.filter(Files::isRegularFile).toList();
-                        if (files.size() > 100) {
-                            files.sort((a,b) -> {
-                                try {
-                                    return Files.getLastModifiedTime(a).compareTo(Files.getLastModifiedTime(b));
-                                } catch (Exception e) { return 0; }
-                            });
-                            int toDelete = files.size() - 100;
-                            for (int i = 0; i < toDelete; i++) {
-                                try { Files.deleteIfExists(files.get(i)); } catch (Exception ignored) {}
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {}
-                return cachedFile.toUri().toString();
-            } catch (Exception e) {
-                logger.error("Error al cachear imagen: " + imageUrl, e);
-                return imageUrl;
-            }
-        }
-
-        private static String hashUrl(String url) throws Exception {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] hashInBytes = md.digest(url.getBytes());
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hashInBytes) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        }
-
-        private static void cleanupExpiredCacheFiles() {
-            try {
-                Path cachePath = Paths.get(CACHE_DIR);
-                if (!Files.isDirectory(cachePath)) {
-                    return;
-                }
-
-                Instant cutoff = Instant.now().minus(Duration.ofDays(CACHE_TTL_DAYS));
-                try (var stream = Files.list(cachePath)) {
-                    stream.filter(Files::isRegularFile).forEach(path -> {
-                        try {
-                            Instant lastModified = Files.getLastModifiedTime(path).toInstant();
-                            if (lastModified.isBefore(cutoff)) {
-                                Files.deleteIfExists(path);
-                            }
-                        } catch (Exception ignored) {
-                            // La limpieza no debe romper la caché.
-                        }
-                    });
-                }
-            } catch (Exception e) {
-                logger.debug("No se pudo limpiar la caché temporal: {}", e.toString());
-            }
+        public static String resolveLocalPath(String imageSource) {
+            String uri = LocalImagePaths.toFileUri(imageSource);
+            return uri.isBlank() && imageSource != null ? imageSource : uri;
         }
     }
 
@@ -215,14 +74,24 @@ public class MediaPipeService {
         }
 
             logger.info("[MEDIAPIPE] Analizando: {}", imageSource);
-        Path tempFile = null;
+
         try {
-            if (imageSource != null && imageSource.startsWith("http")) {
-                tempFile = Files.createTempFile("mp_img_", ".jpg");
-                try (var in = new URL(imageSource).openStream()) {
-                    Files.copy(in, tempFile, StandardCopyOption.REPLACE_EXISTING);
-                }
-                imageSource = tempFile.toAbsolutePath().toString();
+            if (imageSource != null && (imageSource.startsWith("http://") || imageSource.startsWith("https://"))) {
+                logger.warn("[MEDIAPIPE] Solo se analizan archivos locales. Ignorado: {}", imageSource);
+                return new PoseData();
+            }
+
+            imageSource = LocalImagePaths.toAbsolutePath(imageSource);
+            if (imageSource == null) {
+                logger.warn("[MEDIAPIPE] Ruta local no válida");
+                return new PoseData();
+            }
+
+            Path imagePath = Paths.get(imageSource);
+
+            if (!Files.exists(imagePath)) {
+                logger.warn("[MEDIAPIPE] Archivo no encontrado: {}", imageSource);
+                return new PoseData();
             }
 
             Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
@@ -294,10 +163,6 @@ public class MediaPipeService {
         } catch (Exception e) {
             logger.error("Error en analyzeImage", e);
             return new PoseData();
-        } finally {
-            if (tempFile != null) {
-                try { Files.deleteIfExists(tempFile); } catch (Exception ignored) {}
-            }
         }
     }
 
@@ -392,11 +257,16 @@ public class MediaPipeService {
                 double niy = (imgP.getY() - imgCenter.getY()) / imgScale;
 
                 double dist = Math.hypot(ndx - nix, ndy - niy);
-                double sim = Math.max(0.0, 1.0 - (dist / 1.5));
+                double tolerance = PoseToleranceConfig.skeletonTolerance(part);
+                double sim = Math.max(0.0, 1.0 - (dist / tolerance));
                 total += sim;
                 counted++;
             }
-            return counted == 0 ? 0.0 : (total / counted);
+            if (counted == 0) return 0.0;
+            double similarity = total / counted;
+            // Penalizar poses incompletas
+            similarity *= Math.min(1.0, counted / 15.0);
+            return similarity;
         } catch (Exception e) {
             logger.debug("Error calculating skeleton similarity: {}", e.toString());
             return 0.0;
@@ -473,13 +343,13 @@ public class MediaPipeService {
                 double imgArmL = PoseData.calculateAngle(lm.get(11), lm.get(13), lm.get(15));
                 double diff = Math.abs(drawArmAngle - imgArmL);
                 if (diff > 180) diff = 360 - diff;
-                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / 180.0));
+                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / PoseToleranceConfig.armAngleTolerance()));
             }
             if (lm.containsKey(12) && lm.containsKey(14) && lm.containsKey(16)) {
                 double imgArmR = PoseData.calculateAngle(lm.get(12), lm.get(14), lm.get(16));
                 double diff = Math.abs(drawArmAngle - imgArmR);
                 if (diff > 180) diff = 360 - diff;
-                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / 180.0));
+                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / PoseToleranceConfig.armAngleTolerance()));
             }
             if (bestArmScore > 0) {
                 totalScore += bestArmScore * 2.0;
@@ -506,13 +376,13 @@ public class MediaPipeService {
                  double imgLegL = PoseData.calculateAngle(lm.get(23), lm.get(25), lm.get(27));
                  double diff = Math.abs(drawLegAngle - imgLegL);
                  if (diff > 180) diff = 360 - diff;
-                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / 180.0));
+                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / PoseToleranceConfig.legAngleTolerance()));
              }
              if (lm.containsKey(24) && lm.containsKey(26) && lm.containsKey(28)) {
                  double imgLegR = PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28));
                  double diff = Math.abs(drawLegAngle - imgLegR);
                  if (diff > 180) diff = 360 - diff;
-                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / 180.0));
+                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / PoseToleranceConfig.legAngleTolerance()));
              }
              if (bestLegScore > 0) {
                  totalScore += bestLegScore * 1.5;

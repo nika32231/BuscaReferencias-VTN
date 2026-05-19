@@ -14,6 +14,12 @@ public class MediaPipeServiceTest {
     }
 
     @Test
+    public void testAnalyzeImageRejectsRemoteUrls() {
+        PoseData pose = MediaPipeService.analyzeImage("https://example.com/photo.jpg");
+        assertTrue(pose.getAllLandmarks().isEmpty());
+    }
+
+    @Test
     public void testCalculateSimilarityValue() {
         PoseData drawing = new PoseData();
         drawing.addJoint(org.refcolor.buscareferencias.model.AnatomyPart.HEAD, 100, 50);
