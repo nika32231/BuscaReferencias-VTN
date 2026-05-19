@@ -43,7 +43,7 @@ public class SearchService {
         List<String> normalizedTerms = normalizeTerms(terms);
         int capped = Math.max(PoseToleranceConfig.minResults(), Math.min(limit, PoseToleranceConfig.maxResults()));
         return finalizeResults(
-                prepareForDisplay(loadLocalCandidates(capped * 2), normalizedTerms, capped),
+                prepareForDisplay(loadLocalCandidates(), normalizedTerms, capped),
                 false
         );
     }
@@ -190,7 +190,7 @@ public class SearchService {
         return picked;
     }
 
-    private static List<ImageResult> loadLocalCandidates(int limit) {
+    private static List<ImageResult> loadLocalCandidates() {
         List<ImageResult> results = new ArrayList<>();
         Path cacheDir = Paths.get(PoseToleranceConfig.localImageDir());
         if (!Files.isDirectory(cacheDir)) {
@@ -217,9 +217,7 @@ public class SearchService {
                 }
             });
 
-            int cap = Math.max(1, limit);
-            for (int i = 0; i < Math.min(files.size(), cap); i++) {
-                Path path = files.get(i);
+            for (Path path : files) {
                 String uri = path.toUri().toString();
                 results.add(new ImageResult(uri, uri, uri, prettyTitle(path), 0.0, uri, "local", ""));
             }
