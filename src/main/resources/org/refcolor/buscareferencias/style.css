@@ -10,6 +10,12 @@
     -fx-background-color: #171a1f;
 }
 
+.toolbar-scroll,
+.toolbar-scroll > .viewport {
+    -fx-background-color: #20242a;
+    -fx-background-insets: 0;
+}
+
 /* Evita zonas "blancas" por estilo Modena en contenedores comunes */
 .border-pane,
 .split-pane,
@@ -219,3 +225,45 @@
     -fx-border-radius: 10;
     -fx-min-height: 34;
 }
+
+.compact-mode .tool-bar .button,
+.compact-mode .tool-bar .toggle-button {
+    -fx-font-size: 13px;
+    -fx-padding: 9 12 9 12;
+}
+
+.compact-mode .section-title {
+    -fx-font-size: 13px;
+}
+
+.compact-mode .palette-button {
+    -fx-pref-width: 156;
+    -fx-min-height: 46;
+    -fx-font-size: 13px;
+}
+
+.phone-mode {
+    -fx-font-size: 12px;
+}
+
+.phone-mode .canvas-root {
+    -fx-padding: 10;
+}
+
+.phone-mode .side-palette {
+    -fx-border-width: 0;
+}
+
+.phone-mode .palette-button {
+    -fx-pref-width: 132;
+    -fx-min-height: 44;
+    -fx-font-size: 12px;
+}
+
+.touch-mode .button,
+.touch-mode .toggle-button,
+.touch-mode .list-cell,
+.touch-mode .text-field {
+    -fx-min-height: 44;
+}
+

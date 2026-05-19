@@ -1,0 +1,30 @@
+name: JPro Web Build (manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  jpro-readiness:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Verify desktop build is healthy
+        run: ./mvnw -B -DskipTests clean package
+
+      - name: JPro integration checklist
+        run: |
+          echo "JPro workflow plantilla lista." >> $GITHUB_STEP_SUMMARY
+          echo "1) Activar licencia JPro (secret JPRO_LICENSE)." >> $GITHUB_STEP_SUMMARY
+          echo "2) Añadir plugin/dependencias JPro en un perfil Maven dedicado." >> $GITHUB_STEP_SUMMARY
+          echo "3) Sustituir este job por 'mvn -Pjpro ... jpro:build'." >> $GITHUB_STEP_SUMMARY
+

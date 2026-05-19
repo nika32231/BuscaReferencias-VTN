@@ -2,6 +2,9 @@
 
 Esta carpeta `docs/` contiene una version web minima e independiente del proyecto.
 
+> Nota: la ruta prioritaria de transicion para reutilizar JavaFX/FXML es **JPro**.
+> Este frontend estatico se mantiene como fallback y para pruebas visuales rapidas.
+
 ## Objetivo
 
 - Mantener intacta la app JavaFX desktop.
@@ -40,4 +43,10 @@ En GitHub:
 ## Nota
 
 GitHub Pages no ejecuta Python/MediaPipe/scraping. Este frontend solo presenta UI base y mocks visuales.
+
+## Ruta profesional recomendada (sin reescritura)
+
+- Mantener JavaFX desktop como canal principal.
+- Publicar version navegador con JPro (perfil Maven `jpro`).
+- Usar `docs/` solo como landing/fallback mientras madura el despliegue JPro.
 

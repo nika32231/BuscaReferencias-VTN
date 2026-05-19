@@ -5,26 +5,30 @@
 <?import javafx.scene.layout.*?>
 <?import javafx.geometry.Insets?>
 
-<BorderPane xmlns="http://javafx.com/javafx"
+<BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx"
             xmlns:fx="http://javafx.com/fxml"
             fx:controller="org.refcolor.buscareferencias.controller.DrawingController"
             stylesheets="@style.css">
 
     <top>
-        <ToolBar>
-            <Button text="🗑 Limpiar" onAction="#handleClear">
-                <tooltip><Tooltip text="Borrar todo el lienzo"/></tooltip>
-            </Button>
-            <Button text="↩ Deshacer" onAction="#handleUndo"/>
-            <Button text="↪ Rehacer" onAction="#handleRedo"/>
-            <Separator orientation="VERTICAL"/>
-            <ToggleButton fx:id="btnDraw" text="✎ Dibujar" selected="true" styleClass="tool-button"/>
-            <ToggleButton fx:id="btnErase" text="🧽 Borrar" styleClass="tool-button"/>
-            <Separator orientation="VERTICAL"/>
-            <Button text="🔍 Analizar Pose" onAction="#handleSearch" styleClass="analyze-button"/>
-            <Separator orientation="VERTICAL"/>
-            <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" styleClass="search-button-large"/>
-        </ToolBar>
+        <ScrollPane fitToHeight="true" fitToWidth="true" hbarPolicy="AS_NEEDED" vbarPolicy="NEVER" styleClass="toolbar-scroll">
+            <content>
+                <ToolBar>
+                    <Button text="🗑 Limpiar" onAction="#handleClear">
+                        <tooltip><Tooltip text="Borrar todo el lienzo"/></tooltip>
+                    </Button>
+                    <Button text="↩ Deshacer" onAction="#handleUndo"/>
+                    <Button text="↪ Rehacer" onAction="#handleRedo"/>
+                    <Separator orientation="VERTICAL"/>
+                    <ToggleButton fx:id="btnDraw" text="✎ Dibujar" selected="true" styleClass="tool-button"/>
+                    <ToggleButton fx:id="btnErase" text="🧽 Borrar" styleClass="tool-button"/>
+                    <Separator orientation="VERTICAL"/>
+                    <Button text="🔍 Analizar Pose" onAction="#handleSearch" styleClass="analyze-button"/>
+                    <Separator orientation="VERTICAL"/>
+                    <Button text="🚀 Lanzar Búsqueda Web" onAction="#handleWebSearch" styleClass="search-button-large"/>
+                </ToolBar>
+            </content>
+        </ScrollPane>
     </top>
 
     <center>
@@ -32,7 +36,7 @@
         <SplitPane fx:id="mainSplitPane" dividerPositions="0.78">
             <BorderPane>
                 <left>
-                    <VBox spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
+                    <VBox fx:id="sidePalette" spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
                         <padding>
                             <Insets top="10" right="10" bottom="10" left="10"/>
                         </padding>
@@ -47,9 +51,9 @@
 
                 <center>
                     <!-- SplitPane VERTICAL: canvas arriba / galería abajo -->
-                    <SplitPane orientation="VERTICAL" dividerPositions="0.55">
+                    <SplitPane fx:id="canvasGallerySplitPane" orientation="VERTICAL" dividerPositions="0.55">
                         <StackPane fx:id="canvasRoot" styleClass="canvas-root" minHeight="320">
-                            <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="500" minHeight="350" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
+                            <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="280" minHeight="220" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
                                 <Canvas fx:id="canvas"
                                         width="900" height="600"
                                         onMousePressed="#handleMousePressed"
@@ -61,7 +65,7 @@
                         <VBox spacing="6" styleClass="gallery-root">
                             <Label text="Galería de Referencias" styleClass="section-title"/>
                             <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                                <FlowPane fx:id="galleryPane" hgap="12" vgap="12" styleClass="gallery-pane">
+                                <FlowPane fx:id="galleryPane" hgap="12" vgap="12" prefWrapLength="900" styleClass="gallery-pane">
                                     <!-- Las imágenes aparecen aquí -->
                                 </FlowPane>
                             </ScrollPane>

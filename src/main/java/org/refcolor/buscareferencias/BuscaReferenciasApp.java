@@ -9,6 +9,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
+import javafx.geometry.Rectangle2D;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import org.refcolor.buscareferencias.controller.DrawingController;
 import org.refcolor.buscareferencias.core.FallbackUi;
@@ -61,9 +63,16 @@ public class BuscaReferenciasApp extends Application {
 
         stage.setTitle("Buscador de Referencias por Colores");
         stage.setScene(scene);
-        stage.setMinWidth(1100);
-        stage.setMinHeight(750);
-        stage.setMaximized(true);
+        stage.setMinWidth(360);
+        stage.setMinHeight(620);
+
+        Rectangle2D visualBounds = Screen.getPrimary().getVisualBounds();
+        if (visualBounds.getWidth() >= 1280) {
+            stage.setMaximized(true);
+        } else {
+            stage.setWidth(Math.min(1100, visualBounds.getWidth()));
+            stage.setHeight(Math.min(850, visualBounds.getHeight()));
+        }
 
         logger.info("[STARTUP] stage.show()...");
         stage.show();

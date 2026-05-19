@@ -11,9 +11,12 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.TouchEvent;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.Node;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.control.SplitPane;
@@ -45,7 +48,9 @@ public class DrawingController {
     private static final int UNDO_STACK_LIMIT = 20;
 
     @FXML private Canvas canvas;
+    @FXML private BorderPane rootPane;
     @FXML private VBox paletteContainer;
+    @FXML private VBox sidePalette;
     @FXML private Label statusLabel;
     @FXML private ProgressBar progressBar;
     @FXML private ToggleButton btnDraw;
@@ -53,6 +58,7 @@ public class DrawingController {
     @FXML private StackPane canvasContainer;
     @FXML private StackPane canvasRoot;
     @FXML private VBox rightPanel;
+    @FXML private SplitPane canvasGallerySplitPane;
     @FXML private TitledPane searchPanel;
     @FXML private Button togglePanelBtn;
     @FXML private SplitPane mainSplitPane;
@@ -92,6 +98,14 @@ public class DrawingController {
     private double resizeStartW;
     private double resizeStartH;
 
+    private static final double BREAKPOINT_COMPACT = 1180;
+    private static final double BREAKPOINT_PHONE = 820;
+    private static final double CANVAS_VIEW_PADDING = 24;
+
+    private boolean responsiveForcedRightPanel = false;
+    private boolean responsiveListenersAttached = false;
+    private double currentGalleryImageSize = 150;
+
     public void setHostServices(HostServices hostServices) {
         this.hostServices = hostServices;
     }
@@ -117,8 +131,12 @@ public class DrawingController {
         setupPalette();
         saveCurrentState();
 
-        // Resize manual solamente (sin listeners automáticos)
+        // Resize manual para escritorio (esquina inferior) y auto-fit para web/móvil.
         setupManualCanvasResize();
+        setupTouchInput();
+        setupCanvasAutoFit();
+        attachResponsiveListeners();
+        setupGalleryResponsive();
 
         logger.info("[UI] DrawingController.initialize() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
     }
@@ -190,6 +208,63 @@ public class DrawingController {
         return Math.max(min, Math.min(max, v));
     }
 
+    private void setupTouchInput() {
+        if (canvas == null) return;
+        canvas.setOnTouchPressed(this::handleTouchPressed);
+        canvas.setOnTouchMoved(this::handleTouchDragged);
+        canvas.setOnTouchReleased(this::handleTouchReleased);
+    }
+
+    private void attachResponsiveListeners() {
+        if (canvas == null || responsiveListenersAttached) return;
+
+        canvas.sceneProperty().addListener((obs, oldScene, newScene) -> {
+            if (newScene == null) return;
+            applyResponsiveMode(newScene.getWidth(), newScene.getHeight());
+            newScene.widthProperty().addListener((o, oldW, newW) -> applyResponsiveMode(newW.doubleValue(), newScene.getHeight()));
+            newScene.heightProperty().addListener((o, oldH, newH) -> applyResponsiveMode(newScene.getWidth(), newH.doubleValue()));
+        });
+        responsiveListenersAttached = true;
+    }
+
+    private void applyResponsiveMode(double sceneWidth, double sceneHeight) {
+        if (rootPane == null) return;
+
+        boolean compact = sceneWidth < BREAKPOINT_COMPACT;
+        boolean phone = sceneWidth < BREAKPOINT_PHONE;
+        boolean touchMode = phone || sceneHeight < 620;
+
+        rootPane.getStyleClass().removeAll("compact-mode", "phone-mode", "touch-mode");
+        if (compact) rootPane.getStyleClass().add("compact-mode");
+        if (phone) rootPane.getStyleClass().add("phone-mode");
+        if (touchMode) rootPane.getStyleClass().add("touch-mode");
+
+        if (sidePalette != null) {
+            if (phone) {
+                sidePalette.setPrefWidth(136);
+                sidePalette.setMinWidth(112);
+            } else if (compact) {
+                sidePalette.setPrefWidth(160);
+                sidePalette.setMinWidth(136);
+            } else {
+                sidePalette.setPrefWidth(200);
+                sidePalette.setMinWidth(180);
+            }
+        }
+
+        if (canvasGallerySplitPane != null) {
+            canvasGallerySplitPane.setDividerPositions(phone ? 0.48 : 0.55);
+        }
+
+        if (phone && !rightPanelCollapsed) {
+            setRightPanelCollapsed(true);
+            responsiveForcedRightPanel = true;
+        } else if (!phone && responsiveForcedRightPanel) {
+            setRightPanelCollapsed(false);
+            responsiveForcedRightPanel = false;
+        }
+    }
+
     private void clearToWhite() {
         gc.setFill(Color.WHITE);
         gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
@@ -207,6 +282,81 @@ public class DrawingController {
         gc.setLineWidth(1.5);
         gc.strokeRect(0.75, 0.75, Math.max(0, w - 1.5), Math.max(0, h - 1.5));
         gc.restore();
+    }
+
+    private void setupCanvasAutoFit() {
+        if (canvasRoot == null || canvasContainer == null || canvas == null) return;
+
+        canvasRoot.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
+        canvasRoot.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
+        canvas.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
+        canvas.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
+
+        updateCanvasScaleToViewport();
+    }
+
+    private void updateCanvasScaleToViewport() {
+        if (canvasRoot == null || canvasContainer == null || canvas == null) return;
+
+        double availableW = Math.max(120, canvasRoot.getWidth() - CANVAS_VIEW_PADDING);
+        double availableH = Math.max(120, canvasRoot.getHeight() - CANVAS_VIEW_PADDING);
+        double baseW = Math.max(1, canvas.getWidth());
+        double baseH = Math.max(1, canvas.getHeight());
+
+        double scale = Math.min(availableW / baseW, availableH / baseH);
+        scale = clamp(scale, 0.35, 1.8);
+
+        canvasContainer.setScaleX(scale);
+        canvasContainer.setScaleY(scale);
+    }
+
+    private void setupGalleryResponsive() {
+        if (galleryPane == null) return;
+
+        galleryPane.widthProperty().addListener((obs, oldV, newV) -> applyGalleryResponsiveLayout());
+        if (canvas != null) {
+            canvas.sceneProperty().addListener((obs, oldScene, newScene) -> {
+                if (newScene == null) return;
+                applyGalleryResponsiveLayout();
+                newScene.widthProperty().addListener((o, oldW, newW) -> applyGalleryResponsiveLayout());
+            });
+        }
+    }
+
+    private void applyGalleryResponsiveLayout() {
+        if (galleryPane == null) return;
+
+        double sceneWidth = rootPane != null && rootPane.getScene() != null ? rootPane.getScene().getWidth() : 1400;
+        double available = galleryPane.getWidth();
+        if (available <= 0) {
+            available = sceneWidth < BREAKPOINT_PHONE ? 320 : 760;
+        }
+
+        double target = sceneWidth < BREAKPOINT_PHONE ? 120 : (sceneWidth < BREAKPOINT_COMPACT ? 136 : 150);
+        int cols = Math.max(2, (int) Math.floor((available + 12) / (target + 12)));
+        double imageSize = (available - ((cols - 1) * 12)) / cols;
+        currentGalleryImageSize = clamp(imageSize, 104, 170);
+
+        galleryPane.setPrefWrapLength(available);
+        refreshGalleryCardsSize();
+    }
+
+    private void refreshGalleryCardsSize() {
+        if (galleryPane == null) return;
+
+        double cardW = currentGalleryImageSize + 10;
+        double cardH = currentGalleryImageSize + 56;
+        for (Node n : galleryPane.getChildren()) {
+            if (!(n instanceof VBox card)) continue;
+            card.setPrefWidth(cardW);
+            card.setPrefHeight(cardH);
+            for (Node child : card.getChildren()) {
+                if (child instanceof ImageView iv) {
+                    iv.setFitWidth(currentGalleryImageSize);
+                    iv.setFitHeight(currentGalleryImageSize);
+                }
+            }
+        }
     }
 
     private void saveCurrentState() {
@@ -251,41 +401,71 @@ public class DrawingController {
 
     @FXML
     private void handleMousePressed(MouseEvent e) {
-        // Limpiamos el redoStack al iniciar un nuevo cambio manual
-        redoStack.clear();
-        
-        lastX = e.getX();
-        lastY = e.getY();
-        
-        if (btnErase.isSelected()) {
-            gc.setFill(Color.WHITE);
-            gc.fillRect(e.getX() - 10, e.getY() - 10, 20, 20);
-        } else {
-            gc.setStroke(Color.web(currentPart.getHexColor()));
-            gc.beginPath();
-            gc.moveTo(lastX, lastY);
-            // Dibujar un punto inmediatamente para soportar clics sueltos
-            gc.lineTo(lastX, lastY);
-            gc.stroke();
-        }
+        beginStroke(e.getX(), e.getY());
     }
 
     @FXML
     private void handleMouseDragged(MouseEvent e) {
-        if (btnErase.isSelected()) {
-            gc.setFill(Color.WHITE);
-            gc.fillRect(e.getX() - 10, e.getY() - 10, 20, 20);
-        } else {
-            gc.lineTo(e.getX(), e.getY());
-            gc.stroke();
-        }
-        lastX = e.getX();
-        lastY = e.getY();
+        continueStroke(e.getX(), e.getY());
     }
 
     @FXML
     private void handleMouseReleased(MouseEvent e) {
         // e se mantiene por firma FXML
+        finishStroke();
+    }
+
+    @FXML
+    private void handleTouchPressed(TouchEvent e) {
+        if (e.getTouchCount() > 1) return;
+        beginStroke(e.getTouchPoint().getX(), e.getTouchPoint().getY());
+        e.consume();
+    }
+
+    @FXML
+    private void handleTouchDragged(TouchEvent e) {
+        if (e.getTouchCount() > 1) return;
+        continueStroke(e.getTouchPoint().getX(), e.getTouchPoint().getY());
+        e.consume();
+    }
+
+    @FXML
+    private void handleTouchReleased(TouchEvent e) {
+        finishStroke();
+        e.consume();
+    }
+
+    private void beginStroke(double x, double y) {
+        redoStack.clear();
+
+        lastX = x;
+        lastY = y;
+
+        if (btnErase.isSelected()) {
+            gc.setFill(Color.WHITE);
+            gc.fillRect(x - 10, y - 10, 20, 20);
+        } else {
+            gc.setStroke(Color.web(currentPart.getHexColor()));
+            gc.beginPath();
+            gc.moveTo(lastX, lastY);
+            gc.lineTo(lastX, lastY);
+            gc.stroke();
+        }
+    }
+
+    private void continueStroke(double x, double y) {
+        if (btnErase.isSelected()) {
+            gc.setFill(Color.WHITE);
+            gc.fillRect(x - 10, y - 10, 20, 20);
+        } else {
+            gc.lineTo(x, y);
+            gc.stroke();
+        }
+        lastX = x;
+        lastY = y;
+    }
+
+    private void finishStroke() {
         if (!btnErase.isSelected()) {
             gc.stroke();
             gc.closePath();
@@ -376,23 +556,24 @@ public class DrawingController {
     }
 
     private void displayResults(List<ImageResult> results) {
+        applyGalleryResponsiveLayout();
         for (ImageResult result : results) {
             VBox card = new VBox(5);
             card.getStyleClass().add("image-card");
             card.setAlignment(javafx.geometry.Pos.CENTER);
-            card.setPrefWidth(160);
-            card.setPrefHeight(210);
+            card.setPrefWidth(currentGalleryImageSize + 10);
+            card.setPrefHeight(currentGalleryImageSize + 56);
 
             ImageView iv = new ImageView();
-            iv.setFitWidth(150);
-            iv.setFitHeight(150);
+            iv.setFitWidth(currentGalleryImageSize);
+            iv.setFitHeight(currentGalleryImageSize);
             iv.setPreserveRatio(true);
 
             try {
                 String thumbUrl = result.getDisplayThumbnailUrl() == null || result.getDisplayThumbnailUrl().isBlank()
                         ? result.getThumbnailUrl()
                         : result.getDisplayThumbnailUrl();
-                Image img = new Image(thumbUrl, 150, 150, true, true, true);
+                Image img = new Image(thumbUrl, currentGalleryImageSize, currentGalleryImageSize, true, true, true);
                 iv.setImage(img);
                 img.exceptionProperty().addListener((obs, oldEx, newEx) -> {
                     if (newEx != null) {
@@ -429,6 +610,7 @@ public class DrawingController {
 
             galleryPane.getChildren().add(card);
         }
+        refreshGalleryCardsSize();
     }
 
     @FXML
@@ -509,7 +691,11 @@ public class DrawingController {
 
     @FXML
     private void toggleRightPanel(ActionEvent event) {
-        // Delegamos en la lógica existente (si hubiera método público), o implementamos aquí.
+        responsiveForcedRightPanel = false;
+        setRightPanelCollapsed(!rightPanelCollapsed);
+    }
+
+    private void setRightPanelCollapsed(boolean collapsed) {
         if (mainSplitPane == null || rightPanel == null) {
             if (searchPanel != null) {
                 boolean expanded = searchPanel.isExpanded();
@@ -521,8 +707,8 @@ public class DrawingController {
             return;
         }
 
-        rightPanelCollapsed = !rightPanelCollapsed;
-        if (rightPanelCollapsed) {
+        rightPanelCollapsed = collapsed;
+        if (collapsed) {
             rightPanel.setManaged(false);
             rightPanel.setVisible(false);
             if (togglePanelBtn != null) togglePanelBtn.setText("⏵");
