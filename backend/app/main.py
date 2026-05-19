@@ -32,7 +32,20 @@ def root() -> dict[str, object]:
         "status": "ok",
         "docs": "/docs",
         "health": "/health",
-        "search": "/api/v1/search/references",
+        "search": "/search",
+        "searchLegacy": "/api/v1/search/references",
+        "config": "/config",
+    }
+
+
+@app.get("/config", tags=["configuration"])
+def get_config() -> dict[str, object]:
+    """Devuelve la configuración de feature flags para el cliente."""
+    return {
+        "rollout_percentage": settings.rollout_percentage,
+        "force_local": settings.force_local,
+        "force_backend": settings.force_backend,
+        "hash_seed": settings.hash_seed,
     }
 
 
@@ -50,4 +63,3 @@ if __name__ == "__main__":
         reload=settings.reload,
         log_level=settings.log_level,
     )
-

@@ -24,14 +24,22 @@ class BackendSmokeTests(unittest.TestCase):
 
     def test_search_endpoint_returns_list(self) -> None:
         response = self.client.post(
-            "/api/v1/search/references",
+            "/search",
             json={
                 "terms": ["upper body anatomy reference", "arms up pose"],
                 "poseData": {"source": "javafx"},
             },
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        self.assertIsInstance(response.json(), list)
+
+    def test_search_legacy_endpoint_still_available(self) -> None:
+        response = self.client.post(
+            "/api/v1/search/references",
+            json={"terms": ["pose reference"]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response.json(), list)
 
     def test_cache_manager_prunes_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

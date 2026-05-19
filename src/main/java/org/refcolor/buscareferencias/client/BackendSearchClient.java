@@ -18,11 +18,15 @@ import java.util.List;
 
 public final class BackendSearchClient {
     private static final Logger logger = LoggerFactory.getLogger(BackendSearchClient.class);
-    private static final String DEFAULT_SEARCH_PATH = "/api/v1/search/references";
+    private static final List<String> SEARCH_PATH_CANDIDATES = List.of(
+            "/search",
+            "/api/v1/search/references"
+    );
 
     private final HttpClient httpClient;
     private final URI baseUri;
     private final Duration timeout;
+    private final FlagManager flagManager;
 
     public BackendSearchClient(String baseUrl, Duration timeout) {
         if (baseUrl == null || baseUrl.isBlank()) {
@@ -34,10 +38,33 @@ public final class BackendSearchClient {
         }
         this.baseUri = URI.create(normalized);
         this.timeout = timeout == null ? Duration.ofSeconds(120) : timeout;
+        this.flagManager = new FlagManager();
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(this.timeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        // Intentar cargar flags del backend en paralelo (no-bloqueo)
+        loadFlagsAsync();
+    }
+
+    /**
+     * Intenta cargar la configuración de flags del backend de forma asíncrona.
+     */
+    private void loadFlagsAsync() {
+        new Thread(() -> {
+            try {
+                HttpRequest request = HttpRequest.newBuilder(baseUri.resolve("/config"))
+                        .timeout(Duration.ofSeconds(5))
+                        .GET()
+                        .build();
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    flagManager.updateFromBackendConfig(response.body());
+                }
+            } catch (Exception e) {
+                logger.debug("No se pudo cargar flags del backend: {}", e.toString());
+            }
+        }, "BackendFlagLoader").start();
     }
 
     public List<ImageResult> searchReferences(List<String> terms, PoseData poseData, List<String> providers, int limit, String sessionId) {
@@ -58,18 +85,30 @@ public final class BackendSearchClient {
             payload.put("sessionId", sessionId.trim());
         }
 
-        HttpRequest request = HttpRequest.newBuilder(baseUri.resolve(DEFAULT_SEARCH_PATH))
-                .timeout(timeout)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
-                .build();
-
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("Backend returned HTTP " + response.statusCode() + ": " + truncate(response.body()));
+            IllegalStateException lastHttpError = null;
+            for (String path : SEARCH_PATH_CANDIDATES) {
+                HttpRequest request = HttpRequest.newBuilder(baseUri.resolve(path))
+                        .timeout(timeout)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofString(payload.toString(), StandardCharsets.UTF_8))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                    return parseResults(response.body());
+                }
+                if (response.statusCode() == 404) {
+                    logger.info("Ruta backend no encontrada en {}{}, probando siguiente fallback", baseUri, path);
+                    continue;
+                }
+                lastHttpError = new IllegalStateException("Backend returned HTTP " + response.statusCode() + " on " + path + ": " + truncate(response.body()));
+                break;
             }
-            return parseResults(response.body());
+            if (lastHttpError != null) {
+                throw lastHttpError;
+            }
+            throw new IllegalStateException("No se encontró un endpoint de búsqueda compatible en el backend.");
         } catch (Exception e) {
             logger.warn("Error llamando al backend {}: {}", baseUri, e.toString());
             throw new BackendRequestException("Backend search request failed", e);
@@ -87,6 +126,20 @@ public final class BackendSearchClient {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Acceso a FlagManager para consultar decisiones de rollout.
+     */
+    public FlagManager getFlagManager() {
+        return flagManager;
+    }
+
+    /**
+     * Recarga manualmente los flags del backend.
+     */
+    public void reloadFlags() {
+        loadFlagsAsync();
     }
 
     private List<ImageResult> parseResults(String body) {

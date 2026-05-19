@@ -4,33 +4,40 @@ import json
 from pathlib import Path
 
 from app.models.search import CapabilityInfo, SearchRequest, SearchResult
+from app.services.python_engine_bridge import DEFAULT_ENGINE_BRIDGE, PythonEngineBridge
 from app.utils.cache_manager import CacheManager
 from app.utils.settings import settings
 
-DEFAULT_PROVIDERS = ["pixabay", "pexels", "unsplash", "flickr", "bing", "playwright", "pinterest"]
+DEFAULT_PROVIDERS = settings.default_providers
 
 
 class SearchService:
-    def __init__(self, cache_manager: CacheManager | None = None) -> None:
+    def __init__(
+        self,
+        cache_manager: CacheManager | None = None,
+        engine_bridge: PythonEngineBridge | None = None,
+    ) -> None:
         self.cache = cache_manager or CacheManager(settings.cache_dir, settings.max_cache_images)
+        self.engine = engine_bridge or DEFAULT_ENGINE_BRIDGE
 
     def search_references(self, request: SearchRequest) -> list[SearchResult]:
         session_dir = self.cache.prepare_current_search(request.sessionId)
         self._persist_request(session_dir, request)
         self.cache.prune_current_search()
 
-        # Etapa inicial segura: la canalización está lista, pero la búsqueda online real
-        # se activa por proveedor cuando se incorporen credenciales, scraping controlado y ranking.
-        return []
+        providers = request.providers or DEFAULT_PROVIDERS
+        normalized = request.model_copy(update={"providers": providers})
+        results = self.engine.search(normalized)
+        return results or []
 
     def capabilities(self) -> CapabilityInfo:
         return CapabilityInfo(
             providers=DEFAULT_PROVIDERS,
             cacheDir=str(self.cache.root),
             maxCacheImages=self.cache.max_images,
-            onlineSearchEnabled=False,
-            mediaPipeEnabled=False,
-            playwrightEnabled=False,
+            onlineSearchEnabled=self.engine.is_ready(),
+            mediaPipeEnabled=self.engine.is_ready(),
+            playwrightEnabled=self.engine.is_ready(),
         )
 
     def _persist_request(self, session_dir: Path, request: SearchRequest) -> None:
