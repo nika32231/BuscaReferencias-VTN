@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BuscaReferencias VTN - Web Preview</title>
+    <meta
+      name="description"
+      content="Web preview minima de BuscaReferencias VTN preparada para futura integracion con backend."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="badge">Preview Web</p>
+        <h1>BuscaReferencias VTN</h1>
+      </div>
+      <button id="searchButton" class="primary">Buscar (mock)</button>
+    </header>
+
+    <main class="layout">
+      <section class="panel panel-canvas">
+        <h2>Canvas de referencia</h2>
+        <p class="muted">
+          Base visual para la futura deteccion de pose y zonas de color.
+        </p>
+        <canvas id="referenceCanvas" width="720" height="420"></canvas>
+      </section>
+
+      <section class="panel panel-info">
+        <h2>Estado del proyecto</h2>
+        <ul>
+          <li>Desktop JavaFX sigue siendo la version principal.</li>
+          <li>Este frontend es independiente y compatible con GitHub Pages.</li>
+          <li>La integracion real llegara via API backend (FastAPI o Node).</li>
+        </ul>
+      </section>
+
+      <section class="panel panel-results">
+        <div class="section-title">
+          <h2>Referencias</h2>
+          <p id="resultStatus" class="muted">Mostrando miniaturas de ejemplo.</p>
+        </div>
+        <div id="thumbnailGrid" class="thumbnail-grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <small>
+        Fase actual: frontend minimo para GitHub Pages. Backend de scraping/MediaPipe
+        pendiente en siguiente etapa.
+      </small>
+    </footer>
+
+    <script src="app.js"></script>
+  </body>
+</html>
+
