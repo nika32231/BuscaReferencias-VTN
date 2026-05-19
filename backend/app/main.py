@@ -10,7 +10,7 @@ from app.utils.settings import settings
 app = FastAPI(
     title="BuscaReferencias Backend",
     version="0.1.0",
-    description="Backend híbrido para búsqueda online, análisis visual y caché temporal.",
+    description="Backend local para listar referencias guardadas y gestionar caché temporal.",
 )
 
 app.add_middleware(
@@ -35,6 +35,7 @@ def root() -> dict[str, object]:
         "search": "/search",
         "searchLegacy": "/api/v1/search/references",
         "config": "/config",
+        "localSearchOnly": True,
     }
 
 

@@ -215,8 +215,6 @@ public final class PythonImageSearchClient {
 			steps.add(new SetupStep("install-requirements", runCommand(List.of(venvPython.toString(), "-m", "pip", "install", "-r", requirements.toString()), root, 900)));
 		}
 
-		steps.add(new SetupStep("install-playwright", runCommand(List.of(venvPython.toString(), "-m", "pip", "install", "playwright"), root, 900)));
-		steps.add(new SetupStep("playwright-install-chromium", runCommand(List.of(venvPython.toString(), "-m", "playwright", "install", "chromium"), root, 1200)));
 
 		boolean ok = steps.stream().allMatch(step -> step.result().succeeded());
 		String summary = ok ? "Entorno Python preparado correctamente" : "El auto-setup de Python terminó con errores";

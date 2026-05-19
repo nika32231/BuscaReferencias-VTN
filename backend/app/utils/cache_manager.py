@@ -1,24 +1,24 @@
 from __future__ import annotations
 
+import os
 import re
 import shutil
-from pathlib import Path
 from uuid import uuid4
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
 class CacheManager:
-    def __init__(self, root: Path, max_images: int = 100) -> None:
-        self.root = root
+    def __init__(self, root, max_images: int = 100) -> None:
+        self.root = os.fspath(root)
         self.max_images = max_images
-        self.root.mkdir(parents=True, exist_ok=True)
+        os.makedirs(self.root, exist_ok=True)
 
-    def prepare_current_search(self, session_id: str | None = None) -> Path:
+    def prepare_current_search(self, session_id: str | None = None):
         self.clear_current_search()
         session_name = self._sanitize_session_name(session_id)
-        session_dir = self.root / session_name
-        session_dir.mkdir(parents=True, exist_ok=True)
+        session_dir = os.path.join(self.root, session_name)
+        os.makedirs(session_dir, exist_ok=True)
         return session_dir
 
     @staticmethod
@@ -29,26 +29,31 @@ class CacheManager:
         return candidate or uuid4().hex
 
     def clear_current_search(self) -> None:
-        if not self.root.exists():
+        if not os.path.isdir(self.root):
             return
-        for item in self.root.iterdir():
-            if item.is_dir():
+        for name in os.listdir(self.root):
+            item = os.path.join(self.root, name)
+            if os.path.isdir(item):
                 shutil.rmtree(item, ignore_errors=True)
             else:
                 try:
-                    item.unlink()
+                    os.remove(item)
                 except FileNotFoundError:
                     pass
 
     def prune_current_search(self) -> None:
-        image_files = sorted(
-            (path for path in self.root.rglob("*") if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES),
-            key=lambda path: path.stat().st_mtime,
-        )
+        image_files = []
+        for root, _, files in os.walk(self.root):
+            for filename in files:
+                candidate = os.path.join(root, filename)
+                if os.path.splitext(candidate)[1].lower() in _IMAGE_SUFFIXES:
+                    image_files.append(candidate)
+
+        image_files.sort(key=lambda path: os.path.getmtime(path))
         while len(image_files) > self.max_images:
             victim = image_files.pop(0)
             try:
-                victim.unlink()
+                os.remove(victim)
             except FileNotFoundError:
                 continue
 

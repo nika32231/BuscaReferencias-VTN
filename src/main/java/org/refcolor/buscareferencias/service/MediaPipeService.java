@@ -53,7 +53,7 @@ public class MediaPipeService {
         /**
          * Inicia una nueva sesión de búsqueda. Esto crea y limpia el directorio
          * temporal usado para almacenar miniaturas de la búsqueda actual.
-         * Llamar antes de iniciar una nueva búsqueda online para evitar acumular imágenes.
+         * Llamar antes de iniciar una nueva sesión para evitar acumular imágenes.
          */
         public static synchronized void startSessionCache() {
             try {

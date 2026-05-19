@@ -67,9 +67,8 @@ BuscaReferencias/
 │  │  │  │  ├─ DatabaseManager.java         ✅ BD manager (SIN CAMBIOS)
 │  │  │  │  ├─ DrawingProcessor.java        ✅ Image processor
 │  │  │  │  ├─ MediaPipeService.java        ✅ MediaPipe (SIN CAMBIOS)
-│  │  │  │  ├─ PlaywrightScraper.java       ✅ ACTUALIZADO - Búsqueda web
 │  │  │  │  ├─ PythonImageSearchClient.java ✅ Python client
-│  │  │  │  ├─ SearchService.java           ✅ Búsqueda service (SIN CAMBIOS)
+│  │  │  │  ├─ SearchService.java           ✅ Búsqueda local
 │  │  │  │  └─ SearchTermGenerator.java     ✅ Term generator
 │  │  │  │
 │  │  │  └─ 📂 view/

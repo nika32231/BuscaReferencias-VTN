@@ -515,7 +515,7 @@ public class DrawingController {
             return;
         }
 
-        statusLabel.setText("Buscando referencias online...");
+        statusLabel.setText("Buscando fotos locales...");
         progressBar.setVisible(true);
         progressBar.setProgress(-1);
         galleryPane.getChildren().clear();
@@ -537,7 +537,7 @@ public class DrawingController {
             displayResults(results);
             progressBar.setVisible(false);
             if (results.isEmpty()) {
-                statusLabel.setText("No se encontraron referencias online. Revisa la conexión o la caché local.");
+                statusLabel.setText("No se encontraron fotos locales. Revisa la carpeta de referencias.");
             } else {
                 statusLabel.setText("OK: " + results.size() + " referencias cargadas en galería.");
                 if (currentSearchId != -1) {
@@ -548,8 +548,8 @@ public class DrawingController {
 
         searchTask.setOnFailed(e -> {
             progressBar.setVisible(false);
-            statusLabel.setText("Error en la búsqueda web (test). Revisa logs.");
-            logger.error("Error en búsqueda online (test)", searchTask.getException());
+            statusLabel.setText("Error en la búsqueda local. Revisa logs.");
+            logger.error("Error en búsqueda local", searchTask.getException());
         });
 
         new Thread(searchTask).start();

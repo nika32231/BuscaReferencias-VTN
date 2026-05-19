@@ -4,7 +4,7 @@
     -fx-font-size: 13px;
     -fx-base: #2b2f36;
     -fx-control-inner-background: #2b2f36;
-    -fx-text-background-color: #e6e8ee;
+    -fx-text-background-color: #ffffff;
 
     /* Fondo general de la app (oscuro) */
     -fx-background-color: #171a1f;
@@ -16,16 +16,7 @@
     -fx-background-insets: 0;
 }
 
-/* Evita zonas "blancas" por estilo Modena en contenedores comunes */
-.border-pane,
-.split-pane,
-.split-pane > .split-pane-divider,
-.split-pane > .split-pane-divider:hover,
-.scroll-pane,
-.scroll-pane > .viewport,
-.viewport {
-    -fx-background-color: transparent;
-}
+
 
 /* El SplitPane central debe heredar un fondo oscuro para que no se vea blanco */
 #mainSplitPane {
@@ -41,8 +32,8 @@
 
 /* Tarjeta/blanco dibujable: borde + sombra suave */
 .canvas-container {
-    -fx-padding: 3;
-    -fx-background-color: #ffffff; /* canvas realmente blanco */
+
+
 
     /* Borde doble: uno exterior oscuro + línea interior clara (tipo apps pro) */
     -fx-border-color:
@@ -76,7 +67,6 @@
     -fx-font-size: 14px;
     -fx-background-radius: 10;
     -fx-border-radius: 10;
-    -fx-background-color: #2d323a;
     -fx-text-fill: #e6e8ee;
     -fx-min-height: 38;
 }
@@ -108,27 +98,6 @@
     -fx-background-color: transparent;
     -fx-background: transparent;
 }
-
-/* BORRAR/NEUTRALIZAR estas reglas duplicadas (se reemplazan por las de arriba)
-.canvas-root {
-    -fx-background-color: #14171c;
-    -fx-padding: 14;
-}
-
-.canvas-container {
-    -fx-padding: 0;
-    -fx-background-color: #ffffff;
-    -fx-border-color: #596273;
-    -fx-border-width: 2px;
-    -fx-background-radius: 14;
-    -fx-border-radius: 14;
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.45), 22, 0, 0, 10);
-}
-
-.canvas-root {
-    -fx-background-insets: 0;
-}
-*/
 
 .side-palette {
     -fx-background-color: #20242a;

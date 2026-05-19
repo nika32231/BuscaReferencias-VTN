@@ -12,8 +12,8 @@ import java.util.Properties;
  * Feature flags centralizadas.
  *
  * Precedencia (de mayor a menor):
- * 1) System property: -Dfeatures.playwright.enabled=false
- * 2) Env var: APP_FEATURES_PLAYWRIGHT_ENABLED=false
+ * 1) System property
+ * 2) Env var
  * 3) classpath: /app.properties
  * 4) default
  */
@@ -41,33 +41,6 @@ public final class FeatureFlags {
         return getBoolean("features.depsCheckOnStartup", false);
     }
 
-    public static boolean enablePlaywright() {
-        return getBoolean("features.playwright.enabled", false);
-    }
-
-    public static boolean enableOnlineSearch() {
-        return getBoolean("features.onlineSearch.enabled", false);
-    }
-
-    public static boolean enableBackendHybrid() {
-        return getBoolean("backend.enabled", false);
-    }
-
-    public static String backendBaseUrl() {
-        String raw = getRaw("backend.baseUrl");
-        return raw == null ? "" : raw.trim();
-    }
-
-    public static long backendRequestTimeoutSeconds() {
-        String raw = getRaw("backend.requestTimeoutSeconds");
-        if (raw == null || raw.isBlank()) return 120L;
-        try {
-            return Math.max(5L, Long.parseLong(raw.trim()));
-        } catch (Exception e) {
-            logger.warn("[FLAGS] backend.requestTimeoutSeconds inválido='{}' (usando 120)", raw);
-            return 120L;
-        }
-    }
 
     public static boolean enableMediapipeDebug() {
         return getBoolean("features.mediapipe.debug", false);

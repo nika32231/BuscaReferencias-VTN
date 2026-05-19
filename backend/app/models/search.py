@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 class SearchRequest(BaseModel):
     terms: list[str] = Field(min_length=1, description="Lista de términos de búsqueda normalizados o brutos.")
     poseData: dict[str, Any] | None = Field(default=None, description="Datos de pose enviados por JavaFX.")
-    providers: list[str] | None = Field(default=None, description="Proveedores prioritarios para la búsqueda.")
+    providers: list[str] | None = Field(default=None, description="Filtros locales opcionales para organizar la búsqueda.")
     limit: int = Field(default=12, ge=1, le=100)
     sessionId: str | None = Field(default=None, description="Identificador opcional de sesión/caché.")
 
@@ -42,7 +42,7 @@ class CapabilityInfo(BaseModel):
     providers: list[str]
     cacheDir: str | None = None
     maxCacheImages: int
-    onlineSearchEnabled: bool = False
     mediaPipeEnabled: bool = False
     playwrightEnabled: bool = False
+    localSearchEnabled: bool = True
 

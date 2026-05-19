@@ -20,7 +20,8 @@ class BackendSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["status"], "ok")
-        self.assertIn("cacheDir", payload)
+        self.assertIn("maxCacheImages", payload)
+        self.assertIn("cacheConfigured", payload)
 
     def test_search_endpoint_returns_list(self) -> None:
         response = self.client.post(
@@ -41,16 +42,23 @@ class BackendSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsInstance(response.json(), list)
 
+    def test_capabilities_are_local_only(self) -> None:
+        response = self.client.get("/api/v1/capabilities")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["localSearchEnabled"])
+        self.assertFalse(payload["playwrightEnabled"])
+
     def test_cache_manager_prunes_images(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             manager = CacheManager(root, max_images=2)
             session = manager.prepare_current_search("session-a")
             for index in range(4):
-                image = session / f"{index}.jpg"
+                image = Path(session) / f"{index}.jpg"
                 image.write_bytes(b"fake-image")
             manager.prune_current_search()
-            remaining = sorted(path.name for path in session.glob("*.jpg"))
+            remaining = sorted(path.name for path in Path(session).glob("*.jpg"))
             self.assertEqual(len(remaining), 2)
 
     def test_search_request_normalizes_terms(self) -> None:
