@@ -5,6 +5,7 @@ import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.service.MediaPipeService.ImageCacheService;
 import org.refcolor.buscareferencias.utils.LocalImagePaths;
 import org.refcolor.buscareferencias.utils.PoseToleranceConfig;
+import org.refcolor.buscareferencias.utils.ProjectPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -107,6 +108,10 @@ public class SearchService {
         }
 
         List<ImageResult> finalized = finalizeResults(results, true);
+        if (finalized.isEmpty() && !discovered.isEmpty()) {
+            logger.warn("Ninguna foto pudo puntuarse por pose; mostrando referencias locales sin ordenar.");
+            finalized = prepareForDisplay(discovered, terms, PoseToleranceConfig.maxResults());
+        }
         logger.info("Búsqueda local completada. {} imágenes mostradas (de {} en carpeta).",
                 finalized.size(), discovered.size());
         return finalized;
@@ -192,7 +197,8 @@ public class SearchService {
 
     private static List<ImageResult> loadLocalCandidates() {
         List<ImageResult> results = new ArrayList<>();
-        Path cacheDir = Paths.get(PoseToleranceConfig.localImageDir());
+        Path cacheDir = ProjectPaths.getThumbnailsDirectory();
+        logger.info("Leyendo fotos desde: {}", cacheDir);
         if (!Files.isDirectory(cacheDir)) {
             try {
                 Files.createDirectories(cacheDir);

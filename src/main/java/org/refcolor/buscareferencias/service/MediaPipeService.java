@@ -190,6 +190,10 @@ public class MediaPipeService {
         if (imagePose == null || drawingPose == null) return 0.0;
         if (imagePose.getAllLandmarks().isEmpty() || drawingPose.getAllJoints().isEmpty()) return 0.0;
 
+        int jointCount = drawingPose.getAllJoints().size();
+        double partial = calculatePartialDrawingSimilarity(drawingPose, imagePose);
+        double headSim = headOnlySimilarity(drawingPose.getAllJoints(), imagePose.getAllLandmarks());
+
         double cosine = calculateCosineSimilarity(drawingPose.getEmbedding(), imagePose.getEmbedding());
         double angles = calculateAngleBasedSimilarity(drawingPose, imagePose);
         double skeleton = calculateSkeletonSimilarity(drawingPose, imagePose);
@@ -197,17 +201,84 @@ public class MediaPipeService {
 
         double finalScore;
         boolean hasEmbeddings = cosine > 0.0;
-        if (hasEmbeddings) {
-            // Con embeddings: usar pesos originales
+        if (jointCount <= 4) {
+            // Dibujo parcial (p. ej. solo cabeza): posición absoluta en el encuadre
+            finalScore = Math.max(partial, headSim);
+        } else if (hasEmbeddings) {
             finalScore = (0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour);
         } else {
-            // Sin embeddings: redistribuir pesos para no perder señal
             finalScore = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
+            finalScore = Math.max(finalScore, partial * 0.25);
         }
         finalScore = Math.max(0.0, Math.min(1.0, finalScore));
-        logger.info("[SIMILARITY] components: cosine={} angles={} skeleton={} contour={} final={} (hasEmbeddings={})",
-                String.format("%.4f", cosine), String.format("%.4f", angles), String.format("%.4f", skeleton), String.format("%.4f", contour), String.format("%.4f", finalScore), hasEmbeddings);
+        logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} skeleton={} contour={} final={}",
+                jointCount,
+                String.format("%.4f", partial), String.format("%.4f", headSim),
+                String.format("%.4f", cosine), String.format("%.4f", angles),
+                String.format("%.4f", skeleton), String.format("%.4f", contour),
+                String.format("%.4f", finalScore));
         return finalScore;
+    }
+
+    /**
+     * Compara cada parte dibujada con su landmark en coordenadas normalizadas (0-1).
+     * Adecuado cuando el dibujo no incluye torso completo.
+     */
+    private static double calculatePartialDrawingSimilarity(PoseData drawingPose, PoseData imagePose) {
+        var joints = drawingPose.getAllJoints();
+        var lm = imagePose.getAllLandmarks();
+        java.util.Map<AnatomyPart, Integer[]> mapping = partToLandmarkIds();
+        double total = 0.0;
+        int counted = 0;
+        for (var entry : mapping.entrySet()) {
+            AnatomyPart part = entry.getKey();
+            if (!joints.containsKey(part)) {
+                continue;
+            }
+            javafx.geometry.Point2D drawP = joints.get(part);
+            javafx.geometry.Point2D imgP = averageLandmark(lm, entry.getValue());
+            if (imgP == null) {
+                continue;
+            }
+            double dist = Math.hypot(drawP.getX() - imgP.getX(), drawP.getY() - imgP.getY());
+            double tolerance = PoseToleranceConfig.skeletonTolerance(part);
+            total += Math.max(0.0, 1.0 - (dist / tolerance));
+            counted++;
+        }
+        if (counted == 0) {
+            return 0.0;
+        }
+        return total / counted;
+    }
+
+    private static java.util.Map<AnatomyPart, Integer[]> partToLandmarkIds() {
+        java.util.Map<AnatomyPart, Integer[]> mapping = new java.util.HashMap<>();
+        mapping.put(AnatomyPart.HEAD, new Integer[]{0});
+        mapping.put(AnatomyPart.ARMS, new Integer[]{11, 12});
+        mapping.put(AnatomyPart.FOREARMS, new Integer[]{13, 14});
+        mapping.put(AnatomyPart.HANDS, new Integer[]{15, 16});
+        mapping.put(AnatomyPart.THIGHS, new Integer[]{23, 24});
+        mapping.put(AnatomyPart.CALVES, new Integer[]{25, 26});
+        mapping.put(AnatomyPart.FEET, new Integer[]{27, 28});
+        return mapping;
+    }
+
+    private static javafx.geometry.Point2D averageLandmark(
+            java.util.Map<Integer, javafx.geometry.Point2D> lm, Integer[] ids) {
+        double sumX = 0;
+        double sumY = 0;
+        int found = 0;
+        for (int id : ids) {
+            if (lm.containsKey(id)) {
+                sumX += lm.get(id).getX();
+                sumY += lm.get(id).getY();
+                found++;
+            }
+        }
+        if (found == 0) {
+            return null;
+        }
+        return new javafx.geometry.Point2D(sumX / found, sumY / found);
     }
 
     private static double calculateSkeletonSimilarity(PoseData drawingPose, PoseData imagePose) {
@@ -215,36 +286,30 @@ public class MediaPipeService {
             var joints = drawingPose.getAllJoints();
             var lm = imagePose.getAllLandmarks();
 
-            javafx.geometry.Point2D drawCenter = joints.getOrDefault(org.refcolor.buscareferencias.model.AnatomyPart.TORSO, null);
+            javafx.geometry.Point2D drawCenter = joints.get(org.refcolor.buscareferencias.model.AnatomyPart.TORSO);
+            if (drawCenter == null) {
+                drawCenter = estimateJointCenter(joints);
+            }
+
             javafx.geometry.Point2D imgCenter = null;
             if (lm.containsKey(23) && lm.containsKey(24)) {
                 imgCenter = new javafx.geometry.Point2D((lm.get(23).getX() + lm.get(24).getX()) / 2.0, (lm.get(23).getY() + lm.get(24).getY()) / 2.0);
             } else if (lm.containsKey(11) && lm.containsKey(12)) {
                 imgCenter = new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0, (lm.get(11).getY() + lm.get(12).getY()) / 2.0);
+            } else if (lm.containsKey(0)) {
+                imgCenter = lm.get(0);
             }
-            if (drawCenter == null || imgCenter == null) return 0.0;
 
-            double drawScale = 0.0;
-            if (joints.containsKey(org.refcolor.buscareferencias.model.AnatomyPart.HEAD) && joints.containsKey(org.refcolor.buscareferencias.model.AnatomyPart.TORSO)) {
-                drawScale = joints.get(org.refcolor.buscareferencias.model.AnatomyPart.HEAD).distance(joints.get(org.refcolor.buscareferencias.model.AnatomyPart.TORSO));
+            if (drawCenter == null || imgCenter == null) {
+                return headOnlySimilarity(joints, lm);
             }
-            double imgScale = 0.0;
-            if (lm.containsKey(0) && (lm.containsKey(11) || lm.containsKey(12))) {
-                javafx.geometry.Point2D shoulder = lm.containsKey(11) && lm.containsKey(12) ?
-                        new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0, (lm.get(11).getY() + lm.get(12).getY()) / 2.0) :
-                        lm.get(11) != null ? new javafx.geometry.Point2D(lm.get(11).getX(), lm.get(11).getY()) : new javafx.geometry.Point2D(lm.get(12).getX(), lm.get(12).getY());
-                imgScale = new javafx.geometry.Point2D(lm.get(0).getX(), lm.get(0).getY()).distance(shoulder);
-            }
-            if (drawScale <= 0 || imgScale <= 0) return 0.0;
 
-            java.util.Map<org.refcolor.buscareferencias.model.AnatomyPart, Integer[]> mapping = new java.util.HashMap<>();
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.HEAD, new Integer[]{0});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.ARMS, new Integer[]{11,12});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.FOREARMS, new Integer[]{13,14});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.HANDS, new Integer[]{15,16});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.THIGHS, new Integer[]{23,24});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.CALVES, new Integer[]{25,26});
-            mapping.put(org.refcolor.buscareferencias.model.AnatomyPart.FEET, new Integer[]{27,28});
+            double drawScale = estimateDrawScale(joints, drawCenter);
+            double imgScale = estimateImageScale(lm, imgCenter);
+            if (drawScale <= 0) drawScale = 0.15;
+            if (imgScale <= 0) imgScale = 0.15;
+
+            java.util.Map<org.refcolor.buscareferencias.model.AnatomyPart, Integer[]> mapping = partToLandmarkIds();
 
             double total = 0.0;
             int counted = 0;
@@ -277,15 +342,74 @@ public class MediaPipeService {
                 total += sim;
                 counted++;
             }
-            if (counted == 0) return 0.0;
+            if (counted == 0) {
+                return headOnlySimilarity(joints, lm);
+            }
             double similarity = total / counted;
-            // Penalizar poses incompletas
-            similarity *= Math.min(1.0, counted / 15.0);
+            similarity *= Math.min(1.0, Math.max(0.35, counted / 8.0));
             return similarity;
         } catch (Exception e) {
             logger.debug("Error calculating skeleton similarity: {}", e.toString());
             return 0.0;
         }
+    }
+
+    private static double headOnlySimilarity(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (!joints.containsKey(AnatomyPart.HEAD) || !lm.containsKey(0)) {
+            return 0.0;
+        }
+        javafx.geometry.Point2D drawHead = joints.get(AnatomyPart.HEAD);
+        javafx.geometry.Point2D imgHead = lm.get(0);
+        double dist = Math.hypot(drawHead.getX() - imgHead.getX(), drawHead.getY() - imgHead.getY());
+        double tolerance = PoseToleranceConfig.skeletonTolerance(AnatomyPart.HEAD);
+        return Math.max(0.0, 1.0 - (dist / tolerance));
+    }
+
+    private static javafx.geometry.Point2D estimateJointCenter(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints) {
+        if (joints == null || joints.isEmpty()) {
+            return null;
+        }
+        double sx = 0;
+        double sy = 0;
+        for (var p : joints.values()) {
+            sx += p.getX();
+            sy += p.getY();
+        }
+        int n = joints.size();
+        return new javafx.geometry.Point2D(sx / n, sy / n);
+    }
+
+    private static double estimateDrawScale(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            javafx.geometry.Point2D center) {
+        if (joints.containsKey(AnatomyPart.HEAD) && joints.containsKey(AnatomyPart.TORSO)) {
+            return joints.get(AnatomyPart.HEAD).distance(joints.get(AnatomyPart.TORSO));
+        }
+        double maxDist = 0.0;
+        for (var p : joints.values()) {
+            maxDist = Math.max(maxDist, p.distance(center));
+        }
+        return maxDist;
+    }
+
+    private static double estimateImageScale(
+            java.util.Map<Integer, javafx.geometry.Point2D> lm,
+            javafx.geometry.Point2D center) {
+        if (lm.containsKey(0) && (lm.containsKey(11) || lm.containsKey(12))) {
+            javafx.geometry.Point2D shoulder = lm.containsKey(11) && lm.containsKey(12)
+                    ? new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0,
+                    (lm.get(11).getY() + lm.get(12).getY()) / 2.0)
+                    : lm.getOrDefault(11, lm.get(12));
+            return lm.get(0).distance(shoulder);
+        }
+        double maxDist = 0.0;
+        for (var p : lm.values()) {
+            maxDist = Math.max(maxDist, p.distance(center));
+        }
+        return maxDist;
     }
 
     private static double calculateContourSimilarity(PoseData drawingPose, PoseData imagePose) {

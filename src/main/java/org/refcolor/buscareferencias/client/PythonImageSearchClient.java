@@ -222,23 +222,12 @@ public final class PythonImageSearchClient {
 	}
 
 	public static Path resolveProjectScript(String scriptName) {
-		List<Path> roots = new ArrayList<>();
-		Path cwd = Paths.get("").toAbsolutePath().normalize();
-		roots.add(cwd);
-		Path parent = cwd.getParent();
-		if (parent != null) roots.add(parent);
-		Path grandParent = parent != null ? parent.getParent() : null;
-		if (grandParent != null) roots.add(grandParent);
-
-		for (Path root : roots) {
-			Path candidate = root.resolve(scriptName).normalize();
-			if (Files.isRegularFile(candidate)) {
-				logger.info("[PYTHON] Script encontrado en: {}", candidate);
-				return candidate;
-			}
+		Path script = org.refcolor.buscareferencias.utils.ProjectPaths.resolveScript(scriptName);
+		if (script != null) {
+			logger.info("[PYTHON] Script encontrado en: {}", script);
+			return script;
 		}
-
-		logger.warn("[PYTHON] No se encontró {} desde {}", scriptName, cwd);
+		logger.warn("[PYTHON] No se encontro {} (buscado en Python/ y raiz del proyecto)", scriptName);
 		return null;
 	}
 

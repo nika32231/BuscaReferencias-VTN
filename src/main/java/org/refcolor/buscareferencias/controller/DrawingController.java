@@ -33,6 +33,7 @@ import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.utils.DrawingProcessor;
 import org.refcolor.buscareferencias.service.SearchService;
+import org.refcolor.buscareferencias.utils.ProjectPaths;
 import org.refcolor.buscareferencias.utils.SearchTermGenerator;
 import org.refcolor.buscareferencias.database.DatabaseManager;
 import javafx.event.ActionEvent;
@@ -557,7 +558,7 @@ public class DrawingController {
             displayResults(results);
             progressBar.setVisible(false);
             if (results.isEmpty()) {
-                statusLabel.setText("Sin resultados. Añade fotos en cache/thumbnails y analiza el dibujo.");
+                statusLabel.setText(buildEmptySearchMessage());
             } else {
                 statusLabel.setText(String.format("OK: %d fotos (ordenadas por similitud).", results.size()));
                 if (currentSearchId != -1) {
@@ -747,6 +748,20 @@ public class DrawingController {
             rightPanel.setVisible(true);
             if (togglePanelBtn != null) togglePanelBtn.setText("⏴");
             mainSplitPane.setDividerPositions(0.78);
+        }
+    }
+
+    private String buildEmptySearchMessage() {
+        try {
+            java.nio.file.Path dir = ProjectPaths.getThumbnailsDirectory();
+            long count = java.nio.file.Files.list(dir).filter(java.nio.file.Files::isRegularFile).count();
+            if (count == 0) {
+                return "No hay fotos en: " + dir;
+            }
+            return "Hay " + count + " fotos en caché pero no se pudo analizar la pose. "
+                    + "Reinstala Python (.venv + requirements.txt) y dibuja con el color de la cabeza.";
+        } catch (Exception e) {
+            return "Sin resultados. Revisa cache/thumbnails y el entorno Python.";
         }
     }
 

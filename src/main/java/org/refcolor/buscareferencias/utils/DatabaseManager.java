@@ -20,10 +20,26 @@ public class DatabaseManager {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
     private static final String URL = "jdbc:sqlite:buscareferencias.db";
     private static final int DEFAULT_USER_ID = 1;
+    private static volatile boolean schemaReady = false;
+
+    public static void ensureInitialized() {
+        if (schemaReady) {
+            return;
+        }
+        synchronized (DatabaseManager.class) {
+            if (!schemaReady) {
+                initDatabase();
+            }
+        }
+    }
 
     public static Connection getConnection() throws SQLException {
+        ensureInitialized();
+        return openConnection();
+    }
+
+    private static Connection openConnection() throws SQLException {
         try {
-            // Forzar carga del driver en entornos modulares (Java 9+)
             Class.forName("org.sqlite.JDBC");
         } catch (ClassNotFoundException e) {
             logger.error("SQLite JDBC Driver not found", e);
@@ -97,7 +113,11 @@ public class DatabaseManager {
     }
 
     public static org.refcolor.buscareferencias.model.PoseData getCachedPose(String url) {
-        String sql = "SELECT landmarks, COALESCE(embeddings, embedding) AS embedding_data FROM Resultados WHERE COALESCE(url_imagen, sourceUrl, url_origen, thumbnailPath) = ? AND landmarks IS NOT NULL LIMIT 1";
+        if (url == null || url.isBlank()) {
+            return null;
+        }
+        String sql = "SELECT landmarks, COALESCE(embeddings, embedding) AS embedding_data FROM Resultados "
+                + "WHERE COALESCE(url_imagen, sourceUrl, url_origen, thumbnailPath) = ? AND landmarks IS NOT NULL LIMIT 1";
         try (Connection conn = getConnection();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, url);
@@ -110,8 +130,11 @@ public class DatabaseManager {
                 }
             }
         } catch (SQLException e) {
-            if (e.getMessage() != null && e.getMessage().toLowerCase().contains("no such column")) {
+            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (msg.contains("no such column")) {
                 logger.debug("Caché de pose no disponible en el esquema actual: {}", e.getMessage());
+            } else if (msg.contains("no such table")) {
+                logger.debug("Tabla Resultados aún no creada; se inicializará en el próximo acceso.");
             } else {
                 logger.warn("No se pudo leer la pose cacheada: {}", e.getMessage());
             }
@@ -159,7 +182,7 @@ public class DatabaseManager {
             ");"
         };
 
-        try (Connection conn = getConnection();
+        try (Connection conn = openConnection();
              Statement stmt = conn.createStatement()) {
             // Evitar locks largos en sqlite
             stmt.execute("PRAGMA busy_timeout = 2000");
@@ -172,9 +195,11 @@ public class DatabaseManager {
             logger.info("[DB] Tablas OK");
 
             stmt.execute("INSERT OR IGNORE INTO Usuarios (id_usuario, nombre_usuario) VALUES (1, 'Usuario Local')");
+            schemaReady = true;
 
         } catch (SQLException e) {
             logger.error("[DB] Error inicializando la base de datos", e);
+            schemaReady = false;
         } finally {
             logger.info("[DB] initDatabase() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
         }
