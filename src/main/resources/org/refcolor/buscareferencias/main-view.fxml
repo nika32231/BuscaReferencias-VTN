@@ -23,86 +23,82 @@
                     <ToggleButton fx:id="btnDraw" text="✎ Dibujar" selected="true" styleClass="tool-button"/>
                     <ToggleButton fx:id="btnErase" text="🧽 Borrar" styleClass="tool-button"/>
                     <Separator orientation="VERTICAL"/>
-                    <Button text="🔍 Analizar Pose" onAction="#handleSearch" styleClass="analyze-button"/>
+                    <Button text="🔍 Buscar fotos" onAction="#handleLocalPhotoSearch" styleClass="search-button-large"/>
                     <Separator orientation="VERTICAL"/>
-                    <Button text="🔍 Buscar en fotos" onAction="#handleLocalPhotoSearch" styleClass="search-button-large"/>
+                    <Button text="➕ Añadir fotos" onAction="#handleAddPhotos" styleClass="add-photos-button">
+                        <tooltip><Tooltip text="Añadir imágenes a la biblioteca de referencias"/></tooltip>
+                    </Button>
                 </ToolBar>
             </content>
         </ScrollPane>
     </top>
 
     <center>
-        <!-- SplitPane HORIZONTAL: izquierda (paleta + canvas + galería) / derecha (panel lateral colapsable) -->
-        <SplitPane fx:id="mainSplitPane" dividerPositions="0.78">
-            <BorderPane>
-                <left>
-                    <VBox fx:id="sidePalette" spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
-                        <padding>
-                            <Insets top="10" right="10" bottom="10" left="10"/>
-                        </padding>
-                        <Label text="Partes del Cuerpo" styleClass="section-title" />
-                        <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                            <VBox fx:id="paletteContainer" spacing="8" styleClass="palette-container">
-                                <!-- Los botones de la paleta se generan dinámicamente -->
-                            </VBox>
+        <BorderPane>
+            <left>
+                <VBox fx:id="sidePalette" spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
+                    <padding>
+                        <Insets top="10" right="10" bottom="10" left="10"/>
+                    </padding>
+                    <Label text="PALETA DE CUERPO" styleClass="section-title" />
+                    <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
+                        <VBox fx:id="paletteContainer" spacing="8" styleClass="palette-container">
+                            <!-- Los botones de la paleta se generan dinámicamente -->
+                        </VBox>
+                    </ScrollPane>
+                </VBox>
+            </left>
+
+            <center>
+                <!-- SplitPane VERTICAL: canvas arriba / galería abajo -->
+                <SplitPane fx:id="canvasGallerySplitPane" orientation="VERTICAL" dividerPositions="0.55">
+                    <StackPane fx:id="canvasRoot" styleClass="canvas-root" minHeight="320">
+                        <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="280" minHeight="220" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
+                            <Canvas fx:id="canvas"
+                                    width="900" height="600"
+                                    onMousePressed="#handleMousePressed"
+                                    onMouseDragged="#handleMouseDragged"
+                                    onMouseReleased="#handleMouseReleased"/>
+                        </StackPane>
+                    </StackPane>
+
+                    <VBox spacing="6" styleClass="gallery-root">
+                        <Label text="GALERÍA DE REFERENCIAS" styleClass="section-title"/>
+                        <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
+                            <FlowPane fx:id="galleryPane" hgap="12" vgap="12" prefWrapLength="900" styleClass="gallery-pane">
+                                <!-- Las imágenes aparecen aquí -->
+                            </FlowPane>
                         </ScrollPane>
                     </VBox>
-                </left>
-
-                <center>
-                    <!-- SplitPane VERTICAL: canvas arriba / galería abajo -->
-                    <SplitPane fx:id="canvasGallerySplitPane" orientation="VERTICAL" dividerPositions="0.55">
-                        <StackPane fx:id="canvasRoot" styleClass="canvas-root" minHeight="320">
-                            <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="280" minHeight="220" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
-                                <Canvas fx:id="canvas"
-                                        width="900" height="600"
-                                        onMousePressed="#handleMousePressed"
-                                        onMouseDragged="#handleMouseDragged"
-                                        onMouseReleased="#handleMouseReleased"/>
-                            </StackPane>
-                        </StackPane>
-
-                        <VBox spacing="6" styleClass="gallery-root">
-                            <Label text="Galería de Referencias" styleClass="section-title"/>
-                            <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                                <FlowPane fx:id="galleryPane" hgap="12" vgap="12" prefWrapLength="900" styleClass="gallery-pane">
-                                    <!-- Las imágenes aparecen aquí -->
-                                </FlowPane>
-                            </ScrollPane>
-                        </VBox>
-                    </SplitPane>
-                </center>
-            </BorderPane>
-
-            <!-- Panel lateral: se hace realmente "invasión mínima" y colapsable -->
-            <VBox fx:id="rightPanel" minWidth="0" prefWidth="320" styleClass="right-panel">
-                <HBox alignment="CENTER_LEFT" spacing="8" styleClass="right-panel-header">
-                    <Button text="⏴" onAction="#toggleRightPanel" fx:id="togglePanelBtn" />
-                    <Label text="Búsqueda / Debug" style="-fx-font-weight: bold;" />
-                    <Pane HBox.hgrow="ALWAYS"/>
-                </HBox>
-
-                <TitledPane fx:id="searchPanel" text="Términos de Búsqueda" expanded="true" animated="true" maxHeight="Infinity">
-                    <VBox spacing="10" styleClass="right-panel-content">
-                        <ListView fx:id="termsListView" VBox.vgrow="ALWAYS" />
-                        <HBox spacing="6">
-                            <TextField fx:id="newTermField" promptText="Nuevo término..." HBox.hgrow="ALWAYS"/>
-                            <Button text="+" onAction="#handleAddTerm"/>
-                        </HBox>
-                        <Button text="🔍 Buscar en fotos" onAction="#handleLocalPhotoSearch" maxWidth="Infinity" styleClass="search-button-large"/>
-                    </VBox>
-                </TitledPane>
-            </VBox>
-        </SplitPane>
+                </SplitPane>
+            </center>
+        </BorderPane>
     </center>
 
     <bottom>
-        <HBox alignment="CENTER_LEFT" styleClass="status-bar">
-            <Label text="Estado:"/>
-            <Label fx:id="statusLabel" text="Listo para dibujar"/>
-            <Pane HBox.hgrow="ALWAYS" />
-            <ProgressBar fx:id="progressBar" visible="false" prefWidth="160" />
-        </HBox>
+        <VBox styleClass="status-bar">
+            <HBox alignment="CENTER_LEFT" spacing="8" styleClass="status-row">
+                <Label text="Estado:" styleClass="status-prefix"/>
+                <Label fx:id="statusLabel" text="Listo para dibujar" HBox.hgrow="ALWAYS"/>
+                <Label fx:id="batchNumLabel" text="" styleClass="batch-info-label"/>
+            </HBox>
+            <VBox fx:id="progressWrapper" visible="false" managed="false" spacing="5" styleClass="search-progress-panel">
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Lote" styleClass="progress-row-label" minWidth="46"/>
+                    <StackPane HBox.hgrow="ALWAYS">
+                        <ProgressBar fx:id="batchProgressBar" prefHeight="11" maxWidth="Infinity" progress="0" styleClass="batch-progress-bar"/>
+                        <Label fx:id="batchPctLabel" text="" styleClass="progress-pct-small" mouseTransparent="true"/>
+                    </StackPane>
+                </HBox>
+                <HBox spacing="10" alignment="CENTER_LEFT">
+                    <Label text="Total" styleClass="progress-row-label" minWidth="46"/>
+                    <StackPane HBox.hgrow="ALWAYS">
+                        <ProgressBar fx:id="progressBar" prefHeight="20" maxWidth="Infinity" progress="0"/>
+                        <Label fx:id="progressLabel" text="" styleClass="progress-label" mouseTransparent="true"/>
+                    </StackPane>
+                </HBox>
+            </VBox>
+        </VBox>
     </bottom>
 
 </BorderPane>

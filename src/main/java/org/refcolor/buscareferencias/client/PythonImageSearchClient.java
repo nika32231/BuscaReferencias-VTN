@@ -23,6 +23,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * Resolver centralizado para lanzar Python desde Java en Windows.
@@ -166,6 +167,97 @@ public final class PythonImageSearchClient {
 			}
 		}
 		return result;
+	}
+
+	/**
+	 * Lanza pose_analyzer.py en modo batch: un único proceso Python que carga el modelo
+	 * una sola vez y analiza todas las imágenes en secuencia.
+	 * Escribe las rutas en stdin (una por línea) y lee los resultados JSON de stdout
+	 * (una línea JSON por imagen). Devuelve la lista de líneas JSON recibidas.
+	 */
+	public static List<String> runBatchScript(Path scriptPath, List<String> imagePaths, int timeoutSeconds) {
+		return runBatchScript(scriptPath, imagePaths, timeoutSeconds, null);
+	}
+
+	/**
+	 * Same as {@link #runBatchScript(Path, List, int)} but calls {@code onImageDone} with the
+	 * running count of results received so far — once per JSON line returned by Python.
+	 * This allows callers to report real per-image progress while the process streams output.
+	 */
+	public static List<String> runBatchScript(Path scriptPath, List<String> imagePaths, int timeoutSeconds,
+	                                           Consumer<Integer> onImageDone) {
+		if (scriptPath == null || imagePaths == null || imagePaths.isEmpty()) {
+			return List.of();
+		}
+		Optional<ResolvedPython> resolved = resolvePython();
+		if (resolved.isEmpty()) {
+			logger.warn("[PYTHON] Python no disponible para análisis batch.");
+			return List.of();
+		}
+
+		List<String> command = new ArrayList<>(resolved.get().commandPrefix());
+		command.add(scriptPath.toAbsolutePath().toString());
+		command.add("--batch");
+
+		ProcessBuilder pb = new ProcessBuilder(command);
+		pb.directory(scriptPath.getParent().toFile());
+
+		try {
+			Process process = pb.start();
+			List<String> results = new ArrayList<>();
+
+			// Hilo dedicado a escribir rutas en stdin y cerrar el stream
+			Thread stdinWriter = new Thread(() -> {
+				try (var writer = new java.io.OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8)) {
+					for (String path : imagePaths) {
+						writer.write(path);
+						writer.write('\n');
+					}
+				} catch (IOException ignored) {}
+			}, "batch-stdin-writer");
+
+			// Hilo dedicado a vaciar stderr (evita bloqueos de buffer)
+			StringBuilder stderrBuf = new StringBuilder();
+			Thread stderrReader = readStreamAsync(process.getErrorStream(), stderrBuf);
+
+			stdinWriter.start();
+			stderrReader.start();
+
+			// Leer stdout línea a línea (cada línea = un JSON de resultado)
+			try (var reader = new java.io.BufferedReader(
+					new java.io.InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+				String line;
+				int doneCount = 0;
+				while ((line = reader.readLine()) != null) {
+					String trimmed = line.trim();
+					if (!trimmed.isEmpty()) {
+						results.add(trimmed);
+						doneCount++;
+						if (onImageDone != null) onImageDone.accept(doneCount);
+					}
+				}
+			}
+
+			joinQuietly(stdinWriter);
+			joinQuietly(stderrReader);
+			boolean finished = process.waitFor(Math.max(1, timeoutSeconds), TimeUnit.SECONDS);
+			if (!finished) {
+				process.destroyForcibly();
+				logger.warn("[PYTHON] Batch timeout después de {} s analizando {} imágenes", timeoutSeconds, imagePaths.size());
+			}
+			if (!stderrBuf.isEmpty()) {
+				logger.debug("[PYTHON] Batch stderr: {}", trim(stderrBuf.toString()));
+			}
+			logger.info("[PYTHON] Batch completado: {} resultados de {} imágenes solicitadas", results.size(), imagePaths.size());
+			return results;
+		} catch (IOException e) {
+			logger.error("[PYTHON] Error de E/S en batch: {}", e.toString());
+			return List.of();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			logger.error("[PYTHON] Batch interrumpido: {}", e.toString());
+			return List.of();
+		}
 	}
 
 	public static CommandResult runPythonScript(Path scriptPath, List<String> args, Path workingDirectory, int timeoutSeconds) {

@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -120,56 +121,12 @@ public class MediaPipeService {
                     if (result.succeeded()) {
                 String outStr = result.stdout();
                 if (outStr.contains("\"landmarks\":")) {
-                    PoseData pose = new PoseData();
-                    JSONObject json = new JSONObject(outStr);
-                    
-                    // Logs detallados para validación (Hito 6)
-                    if (json.has("debug")) {
-                        JSONObject debug = json.getJSONObject("debug");
-                        logger.info("[DEBUG_MP] Imagen: {}, Puntos: {}, Confianza: {}", 
-                            imageSource,
-                            debug.getInt("points_found"), 
-                            String.format("%.2f", debug.getDouble("avg_confidence")));
-                        
-                        if (debug.has("hu_moments")) {
-                             logger.info("[DEBUG_MP] Hu Moments: {}", debug.get("hu_moments"));
-                        }
-                    }
-
-                    // Parsear Landmarks
-                    JSONObject landmarks = json.getJSONObject("landmarks");
-                    for (String key : landmarks.keySet()) {
-                        int id = Integer.parseInt(key);
-                        JSONObject lm = landmarks.getJSONObject(key);
-                        pose.addLandmark(id, lm.getDouble("x"), lm.getDouble("y"));
-                    }
-
-                    // Parsear Embedding
-                    if (json.has("embedding")) {
-                        JSONArray embArray = json.getJSONArray("embedding");
-                        List<Double> embedding = new ArrayList<>();
-                        for (int i = 0; i < embArray.length(); i++) {
-                            embedding.add(embArray.getDouble(i));
-                        }
-                        pose.setEmbedding(embedding);
-                    }
-
-                    if (json.has("pose_angles") && json.get("pose_angles") instanceof JSONObject poseAngles) {
-                        for (String key : poseAngles.keySet()) {
-                            try {
-                                pose.putPoseAngle(key, poseAngles.getDouble(key));
-                            } catch (Exception ignored) {
-                                // Si un campo viene mal formado, lo ignoramos sin romper el flujo.
-                            }
-                        }
-                    }
-                    
-                    // Guardar en caché de sesión para evitar re-análisis durante la búsqueda
+                    PoseData pose = parsePoseFromJson(new JSONObject(outStr), imageSource);
                     try { SESSION_POSE_CACHE.put(imageSource, pose); } catch (Exception ignored) {}
                     return pose;
                 }
             }
-            logger.warn("MediaPipe falló o no detectó nada. Se devuelve pose vacía. exitCode={} error={}",
+            logger.warn("MediaPipe falló o no detectó nada. exitCode={} error={}",
                     result.exitCode(), result.error());
             if (!result.stderr().isBlank()) {
                 logger.warn("MediaPipe stderr: {}", result.stderr().substring(0, Math.min(500, result.stderr().length())));
@@ -179,6 +136,99 @@ public class MediaPipeService {
             logger.error("Error en analyzeImage", e);
             return new PoseData();
         }
+    }
+
+    /**
+     * Analiza un lote de imágenes con UN SOLO proceso Python (modo --batch).
+     * El modelo MediaPipe se carga una única vez → mucho menos RAM y calor.
+     * Devuelve un mapa [rutaAbsoluta → PoseData]; las imágenes sin pose detectada
+     * no aparecen en el mapa (o aparecen con PoseData vacío si hubo error de parseo).
+     */
+    public static java.util.Map<String, PoseData> analyzeImageBatch(List<String> imagePaths) {
+        return analyzeImageBatch(imagePaths, null);
+    }
+
+    /**
+     * Same as {@link #analyzeImageBatch(List)} but calls {@code onImageDone} with the running
+     * count of images analyzed so far, enabling real-time per-image batch progress reporting.
+     */
+    public static java.util.Map<String, PoseData> analyzeImageBatch(List<String> imagePaths, Consumer<Integer> onImageDone) {
+        java.util.Map<String, PoseData> results = new java.util.LinkedHashMap<>();
+        if (imagePaths == null || imagePaths.isEmpty()) {
+            return results;
+        }
+
+        Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
+        if (scriptPath == null) {
+            logger.warn("[BATCH] Script pose_analyzer.py no encontrado; batch cancelado.");
+            return results;
+        }
+
+        // Timeout generoso: ~3 s por imagen es más que suficiente
+        int timeoutSeconds = Math.max(120, imagePaths.size() * 3);
+        logger.info("[BATCH] Analizando {} imágenes en un solo proceso Python (timeout {}s)…",
+                imagePaths.size(), timeoutSeconds);
+
+        List<String> jsonLines = PythonImageSearchClient.runBatchScript(scriptPath, imagePaths, timeoutSeconds, onImageDone);
+
+        for (String line : jsonLines) {
+            try {
+                JSONObject json = new JSONObject(line);
+                String path = json.optString("_path", "");
+                if (path.isBlank()) continue;
+                if (!json.has("landmarks")) continue;
+                PoseData pose = parsePoseFromJson(json, path);
+                if (!pose.getAllLandmarks().isEmpty()) {
+                    SESSION_POSE_CACHE.put(path, pose);
+                }
+                results.put(path, pose);
+            } catch (Exception e) {
+                logger.debug("[BATCH] Error parseando línea batch: {}", e.toString());
+            }
+        }
+        logger.info("[BATCH] {} poses detectadas de {} imágenes.", results.size(), imagePaths.size());
+        return results;
+    }
+
+    /** Convierte el JSON de pose_analyzer.py en un objeto PoseData. */
+    private static PoseData parsePoseFromJson(JSONObject json, String imageSource) {
+        PoseData pose = new PoseData();
+        try {
+            if (json.has("debug")) {
+                JSONObject debug = json.getJSONObject("debug");
+                logger.info("[DEBUG_MP] {}: puntos={} confianza={}",
+                        imageSource,
+                        debug.optInt("points_found", 0),
+                        String.format("%.2f", debug.optDouble("avg_confidence", 0.0)));
+            }
+            JSONObject landmarks = json.getJSONObject("landmarks");
+            for (String key : landmarks.keySet()) {
+                int id = Integer.parseInt(key);
+                JSONObject lm = landmarks.getJSONObject(key);
+                double vis = lm.optDouble("visibility", -1.0);
+                if (vis >= 0) {
+                    pose.addLandmark(id, lm.getDouble("x"), lm.getDouble("y"), vis);
+                } else {
+                    pose.addLandmark(id, lm.getDouble("x"), lm.getDouble("y"));
+                }
+            }
+            if (json.has("embedding")) {
+                JSONArray embArray = json.getJSONArray("embedding");
+                List<Double> embedding = new ArrayList<>();
+                for (int i = 0; i < embArray.length(); i++) {
+                    embedding.add(embArray.getDouble(i));
+                }
+                pose.setEmbedding(embedding);
+            }
+            if (json.has("pose_angles") && json.get("pose_angles") instanceof JSONObject poseAngles) {
+                for (String key : poseAngles.keySet()) {
+                    try { pose.putPoseAngle(key, poseAngles.getDouble(key)); } catch (Exception ignored) {}
+                }
+            }
+        } catch (Exception e) {
+            logger.debug("[MEDIAPIPE] Error parseando JSON de pose: {}", e.toString());
+        }
+        return pose;
     }
 
     /**
@@ -199,23 +249,27 @@ public class MediaPipeService {
         double skeleton = calculateSkeletonSimilarity(drawingPose, imagePose);
         double contour = calculateContourSimilarity(drawingPose, imagePose);
 
+        double coverageFactor = calculateCoverageFactor(drawingPose, imagePose);
+
         double finalScore;
         boolean hasEmbeddings = cosine > 0.0;
         if (jointCount <= 4) {
-            // Dibujo parcial (p. ej. solo cabeza): posición absoluta en el encuadre
-            finalScore = Math.max(partial, headSim);
+            // Dibujo parcial (p. ej. solo cabeza): posición y cobertura
+            finalScore = Math.max(partial, headSim) * coverageFactor;
         } else if (hasEmbeddings) {
-            finalScore = (0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour);
+            finalScore = ((0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour)) * coverageFactor;
         } else {
             finalScore = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
             finalScore = Math.max(finalScore, partial * 0.25);
+            finalScore *= coverageFactor;
         }
         finalScore = Math.max(0.0, Math.min(1.0, finalScore));
-        logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} skeleton={} contour={} final={}",
+        logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} skeleton={} contour={} coverage={} final={}",
                 jointCount,
                 String.format("%.4f", partial), String.format("%.4f", headSim),
                 String.format("%.4f", cosine), String.format("%.4f", angles),
                 String.format("%.4f", skeleton), String.format("%.4f", contour),
+                String.format("%.4f", coverageFactor),
                 String.format("%.4f", finalScore));
         return finalScore;
     }
@@ -241,7 +295,8 @@ public class MediaPipeService {
                 continue;
             }
             double dist = Math.hypot(drawP.getX() - imgP.getX(), drawP.getY() - imgP.getY());
-            double tolerance = PoseToleranceConfig.skeletonTolerance(part);
+            // Tolerancia convertida a espacio 0-1 (configuración pensada para espacio normalizado ~[-2,2])
+            double tolerance = PoseToleranceConfig.skeletonTolerance(part) * 0.06;
             total += Math.max(0.0, 1.0 - (dist / tolerance));
             counted++;
         }
@@ -249,6 +304,39 @@ public class MediaPipeService {
             return 0.0;
         }
         return total / counted;
+    }
+
+    /**
+     * Regiones corporales que el usuario dibujó, basadas en los joints presentes.
+     * HEAD / UPPER / ARMS / LOWER, mapeadas igual que {@link PoseData#getVisibleRegions()}.
+     */
+    private static java.util.Set<String> getDrawingRegions(java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints) {
+        java.util.Set<String> regions = new java.util.HashSet<>();
+        if (joints.containsKey(AnatomyPart.HEAD)) regions.add("HEAD");
+        if (joints.containsKey(AnatomyPart.TORSO)) regions.add("UPPER");
+        if (joints.containsKey(AnatomyPart.ARMS) || joints.containsKey(AnatomyPart.FOREARMS) || joints.containsKey(AnatomyPart.HANDS)) regions.add("ARMS");
+        if (joints.containsKey(AnatomyPart.THIGHS) || joints.containsKey(AnatomyPart.CALVES) || joints.containsKey(AnatomyPart.FEET)) regions.add("LOWER");
+        return regions;
+    }
+
+    /**
+     * Factor de penalización por cobertura corporal.
+     * Penaliza fotos que muestran más partes del cuerpo de las que se dibujaron.
+     * Si la foto no tiene datos de visibilidad (caché antigua) devuelve 1.0 sin penalizar.
+     */
+    private static double calculateCoverageFactor(PoseData drawingPose, PoseData imagePose) {
+        if (!imagePose.hasVisibilityData()) return 1.0;
+        java.util.Set<String> drawingRegions = getDrawingRegions(drawingPose.getAllJoints());
+        java.util.Set<String> photoRegions = imagePose.getVisibleRegions();
+        if (drawingRegions.isEmpty()) return 1.0;
+
+        long extraInPhoto = photoRegions.stream().filter(r -> !drawingRegions.contains(r)).count();
+        long missingFromPhoto = drawingRegions.stream().filter(r -> !photoRegions.contains(r)).count();
+
+        // La foto muestra más de lo dibujado → penalización fuerte
+        // Faltan partes que se dibujaron → penalización leve
+        double penalty = (extraInPhoto * 0.7 + missingFromPhoto * 0.15) / 4.0;
+        return Math.max(0.1, 1.0 - penalty);
     }
 
     private static java.util.Map<AnatomyPart, Integer[]> partToLandmarkIds() {
@@ -363,7 +451,8 @@ public class MediaPipeService {
         javafx.geometry.Point2D drawHead = joints.get(AnatomyPart.HEAD);
         javafx.geometry.Point2D imgHead = lm.get(0);
         double dist = Math.hypot(drawHead.getX() - imgHead.getX(), drawHead.getY() - imgHead.getY());
-        double tolerance = PoseToleranceConfig.skeletonTolerance(AnatomyPart.HEAD);
+        // Tolerancia convertida a espacio 0-1
+        double tolerance = PoseToleranceConfig.skeletonTolerance(AnatomyPart.HEAD) * 0.06;
         return Math.max(0.0, 1.0 - (dist / tolerance));
     }
 

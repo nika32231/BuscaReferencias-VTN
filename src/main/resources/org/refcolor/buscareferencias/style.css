@@ -1,223 +1,373 @@
-.root {
-    /* Paleta neutra y descanso visual */
-    -fx-accent: #6aa6ff;
-    -fx-font-size: 13px;
-    -fx-base: #2b2f36;
-    -fx-control-inner-background: #2b2f36;
-    -fx-text-background-color: #ffffff;
+/* ═══════════════════════════════════════════════════════════
+   BUSCA REFERENCIAS  ·  Tema artístico oscuro
+   ═══════════════════════════════════════════════════════════ */
 
-    /* Fondo general de la app (oscuro) */
-    -fx-background-color: #171a1f;
+.root {
+    -fx-accent: #a78bfa;
+    -fx-font-size: 13px;
+    -fx-base: #1f1c2e;
+    -fx-control-inner-background: #1f1c2e;
+    -fx-text-background-color: #ede9ff;
+    -fx-background-color: #13111d;
 }
+
+/* ── Toolbar ─────────────────────────────────────────────── */
 
 .toolbar-scroll,
 .toolbar-scroll > .viewport {
-    -fx-background-color: #20242a;
-    -fx-background-insets: 0;
-}
-
-
-
-/* El SplitPane central debe heredar un fondo oscuro para que no se vea blanco */
-#mainSplitPane {
-    -fx-background-color: #171a1f;
-}
-
-/* Área alrededor del canvas = "workspace" oscuro tipo Photoshop/Krita */
-.canvas-root {
-    -fx-background-insets: 0;
-    -fx-background-color: #101318; /* un pelín más contrastado */
-    -fx-padding: 22; /* deja aire alrededor para que se aprecie la separación */
-}
-
-/* Tarjeta/blanco dibujable: borde + sombra suave */
-.canvas-container {
-
-
-
-    /* Borde doble: uno exterior oscuro + línea interior clara (tipo apps pro) */
-    -fx-border-color:
-        rgba(0,0,0,0.92),   /* exterior (define límite) */
-        rgba(255,255,255,0.95); /* interior (separación sutil con el blanco) */
-    -fx-border-width: 3px, 1px;
-    -fx-border-insets: 0, 3px;
-
-    /* Esquinas suaves (opcional, pero ayuda a la jerarquía visual) */
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-
-    /* Sombra más visible pero suave */
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.72), 36, 0, 0, 18);
-}
-
-/* Si el canvas se redimensiona y queda espacio extra, este fondo también debe ser oscuro */
-.canvas-root > .canvas-container {
+    -fx-background-color: #1a1726;
     -fx-background-insets: 0;
 }
 
 .tool-bar {
-    -fx-spacing: 10;
-    -fx-padding: 10 12 10 12;
-    -fx-background-color: #20242a;
+    -fx-spacing: 6;
+    -fx-padding: 8 14 8 14;
+    -fx-background-color: #1a1726;
+    -fx-border-color: transparent transparent #28234a transparent;
+    -fx-border-width: 0 0 1 0;
 }
 
 .tool-bar .button,
 .tool-bar .toggle-button {
-    -fx-padding: 10 14 10 14;
-    -fx-font-size: 14px;
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-    -fx-text-fill: #e6e8ee;
-    -fx-min-height: 38;
+    -fx-padding: 8 14 8 14;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 7;
+    -fx-border-radius: 7;
+    -fx-text-fill: #bab5d8;
+    -fx-background-color: #26223a;
+    -fx-border-color: #332e4f;
+    -fx-border-width: 1;
+    -fx-min-height: 34;
 }
 
 .tool-bar .button:hover,
 .tool-bar .toggle-button:hover {
-    -fx-background-color: #3a404a;
+    -fx-background-color: #322c50;
+    -fx-text-fill: #e8e2ff;
+    -fx-border-color: #4a4270;
 }
 
-.status-bar {
-    -fx-spacing: 10;
-    -fx-padding: 8 10 8 10;
-    -fx-background-color: #20242a;
-    -fx-text-fill: #b9beca;
+.tool-bar .toggle-button:selected {
+    -fx-background-color: #3d3464;
+    -fx-text-fill: #d8d0ff;
+    -fx-border-color: #a78bfa;
+    -fx-border-width: 1;
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.25), 8, 0, 0, 0);
 }
 
-#statusLabel {
-    -fx-text-fill: #e6e8ee;
-    -fx-font-weight: normal;
+.tool-bar .separator .line {
+    -fx-border-color: #28234a;
+    -fx-border-width: 0 1 0 0;
+}
+
+/* ── Botón principal: Buscar ─────────────────────────────── */
+
+.search-button-large {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #34a860, #217a45);
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 8 20 8 20;
+    -fx-background-radius: 7;
+    -fx-border-width: 0;
+    -fx-min-height: 34;
+    -fx-effect: dropshadow(gaussian, rgba(52,168,96,0.45), 10, 0.1, 0, 2);
+}
+
+.search-button-large:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3ec46e, #34a860);
+    -fx-effect: dropshadow(gaussian, rgba(52,168,96,0.70), 14, 0.15, 0, 3);
+}
+
+.search-button-large:pressed {
+    -fx-background-color: #1a6035;
+    -fx-effect: none;
+}
+
+/* ── Botón Añadir fotos ──────────────────────────────────── */
+
+.add-photos-button {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #a78bfa, #7c5ce8);
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 8 16 8 16;
+    -fx-background-radius: 7;
+    -fx-border-width: 0;
+    -fx-min-height: 34;
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.45), 10, 0.1, 0, 2);
+}
+
+.add-photos-button:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #bea7ff, #a78bfa);
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.70), 14, 0.15, 0, 3);
+}
+
+.add-photos-button:pressed {
+    -fx-background-color: #5a3eae;
+    -fx-effect: none;
+}
+
+/* ── Área de trabajo / Canvas ────────────────────────────── */
+
+.canvas-root {
+    -fx-background-color: radial-gradient(center 50% 50%, radius 80%, #131028, #0a0812);
+    -fx-padding: 28;
+}
+
+.canvas-container {
+    -fx-border-color:
+        rgba(0,0,0,0.96),
+        rgba(200,185,255,0.72);
+    -fx-border-width: 3, 1;
+    -fx-border-insets: 0, 3;
+    -fx-background-radius: 6;
+    -fx-border-radius: 6;
+    -fx-effect:
+        dropshadow(gaussian, rgba(120,90,240,0.18), 40, 0.05, 0, 0),
+        dropshadow(gaussian, rgba(0,0,0,0.92), 60, 0.15, 0, 22);
+}
+
+/* ── Paleta lateral ──────────────────────────────────────── */
+
+.side-palette {
+    -fx-background-color: #171526;
+    -fx-border-color: transparent #28234a transparent transparent;
+    -fx-border-width: 0 1 0 0;
 }
 
 .section-title {
+    -fx-font-size: 10px;
     -fx-font-weight: bold;
-    -fx-font-size: 14px;
-    -fx-text-fill: #e6e8ee;
+    -fx-text-fill: #7060a8;
+    -fx-padding: 0 0 4 0;
 }
+
+.palette-container {
+    -fx-padding: 0 2 4 2;
+}
+
+.palette-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #aca8cc;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-background-radius: 7;
+    -fx-border-radius: 7;
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-pref-width: 180;
+    -fx-min-height: 46;
+    -fx-alignment: CENTER_LEFT;
+    -fx-padding: 9 12 9 10;
+}
+
+.palette-button:hover {
+    -fx-background-color: #1f1c30;
+    -fx-text-fill: #d8d4f8;
+    -fx-border-color: #322c50;
+}
+
+/* Seleccionado: CSS provee fondo genérico;
+   el borde de color específico lo pone el código Java */
+.palette-button:selected {
+    -fx-background-color: #221e38;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.20), 6, 0, 0, 0);
+}
+
+/* ── ScrollPane genérico ─────────────────────────────────── */
 
 .flat-scroll {
     -fx-background-color: transparent;
     -fx-background: transparent;
 }
 
-.side-palette {
-    -fx-background-color: #20242a;
-    -fx-border-color: #2d323a;
-    -fx-border-width: 0 1 0 0;
+.flat-scroll > .viewport {
+    -fx-background-color: transparent;
 }
 
-.palette-button {
-    -fx-background-color: #2d323a;
-    -fx-text-fill: #e6e8ee;
-    -fx-font-weight: bold;
-    -fx-border-color: #3a404a;
-    -fx-border-width: 1px;
-    -fx-background-radius: 12;
-    -fx-border-radius: 12;
-    -fx-pref-width: 180;
-    -fx-min-height: 52;
-    -fx-alignment: CENTER_LEFT;
-    -fx-padding: 10 12 10 12;
-    -fx-font-size: 14px;
-}
-
-.palette-button:hover {
-    -fx-background-color: #3a404a;
-}
-
-.palette-button:selected {
-    -fx-background-color: #2a3a52;
-    -fx-border-color: #6aa6ff;
-}
-
-.analyze-button {
-    -fx-background-color: #2a3a52;
-}
-
-.search-button-large {
-    -fx-background-color: #2f7d4a;
-    -fx-text-fill: white;
-    -fx-font-weight: bold;
-    -fx-font-size: 15px;
-    -fx-padding: 12 20 12 20;
-    -fx-background-radius: 12;
-    -fx-min-height: 42;
-}
-
-.search-button-large:hover {
-    -fx-background-color: #3a9760;
-}
-
-.right-panel {
-    -fx-background-color: #20242a;
-    -fx-border-color: #2d323a;
-    -fx-border-width: 0 0 0 1;
-}
-
-.right-panel-header {
-    -fx-padding: 10 10 8 10;
-}
-
-.right-panel-content {
-    -fx-padding: 10;
-}
+/* ── Galería ─────────────────────────────────────────────── */
 
 .gallery-root {
-    -fx-padding: 10;
-    -fx-background-color: #1e2228;
+    -fx-padding: 10 12 12 12;
+    -fx-background-color: #13111d;
 }
 
 .gallery-pane {
-    -fx-padding: 10;
-}
-
-.gallery-rank {
-    -fx-background-color: rgba(20, 24, 32, 0.85);
-    -fx-text-fill: #ffffff;
-    -fx-font-size: 13px;
-    -fx-font-weight: bold;
-    -fx-padding: 4 8 4 8;
-    -fx-background-radius: 6;
+    -fx-padding: 6;
+    -fx-background-color: transparent;
 }
 
 .image-card {
-    -fx-padding: 10;
-    -fx-border-color: #2d323a;
-    -fx-border-width: 1px;
+    -fx-padding: 8;
+    -fx-border-color: #2a2448;
+    -fx-border-width: 1;
     -fx-border-radius: 12;
     -fx-background-radius: 12;
-    -fx-background-color: #20242a;
-    -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.18), 8, 0, 0, 3);
+    -fx-background-color:
+        linear-gradient(from 0% 0% to 0% 100%, #26213e, #191629),
+        #191629;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 12, 11;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.65), 16, 0, 0, 6);
 }
 
 .image-card:hover {
-    -fx-background-color: #2d323a;
-    -fx-border-color: #6aa6ff;
+    -fx-border-color: #b89eff;
+    -fx-background-color:
+        linear-gradient(from 0% 0% to 0% 100%, #2e2850, #231f3c),
+        #231f3c;
+    -fx-background-insets: 0, 1;
+    -fx-effect:
+        dropshadow(gaussian, rgba(167,139,250,0.55), 22, 0.08, 0, 0),
+        dropshadow(gaussian, rgba(0,0,0,0.70), 12, 0, 0, 4);
 }
 
-/* Regla global para botones (incluye el "+" del panel derecho)
-   Nota: se deja la toolbar con su propia regla más específica. */
-.button {
-    -fx-padding: 10 12 10 12;
-    -fx-font-size: 13px;
-    -fx-background-radius: 10;
-    -fx-border-radius: 10;
-    -fx-min-height: 34;
+.gallery-rank {
+    -fx-background-color: rgba(8, 6, 18, 0.88);
+    -fx-text-fill: #a09aca;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 3 7 3 7;
+    -fx-background-radius: 6;
 }
+
+/* Score pill set via inline style in Java — these affect label containers */
+.score-high {
+    -fx-text-fill: #68d391;
+    -fx-font-weight: bold;
+}
+
+.score-low {
+    -fx-text-fill: #fc8181;
+    -fx-font-weight: bold;
+}
+
+/* ── Barra de estado ─────────────────────────────────────── */
+
+.status-bar {
+    -fx-spacing: 4;
+    -fx-padding: 7 14 8 14;
+    -fx-background-color: #171526;
+    -fx-border-color: #28234a transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.status-row {
+    -fx-spacing: 8;
+    -fx-alignment: CENTER_LEFT;
+}
+
+.status-prefix {
+    -fx-text-fill: #3e3860;
+    -fx-font-size: 10px;
+}
+
+#statusLabel {
+    -fx-text-fill: #b8b2d8;
+    -fx-font-size: 12px;
+}
+
+.batch-info-label {
+    -fx-text-fill: #a78bfa;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 2 7 2 7;
+    -fx-background-color: rgba(167,139,250,0.12);
+    -fx-background-radius: 10;
+}
+
+.search-progress-panel {
+    -fx-padding: 3 0 0 0;
+}
+
+.progress-row-label {
+    -fx-text-fill: #5c5480;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+}
+
+/* ── Barras de progreso ──────────────────────────────────── */
+
+/* Total bar */
+.progress-bar {
+    -fx-min-height: 20;
+    -fx-pref-height: 20;
+}
+
+.progress-bar > .bar {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #7c5ce8, #a78bfa, #c4b0ff);
+    -fx-background-radius: 5;
+    -fx-background-insets: 1;
+}
+
+.progress-bar > .track {
+    -fx-background-color: #1e1a30;
+    -fx-background-radius: 5;
+    -fx-background-insets: 0;
+}
+
+.progress-label {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.80), 4, 0, 0, 0);
+}
+
+/* Batch bar (thin, cooler purple) */
+.batch-progress-bar {
+    -fx-min-height: 11;
+    -fx-pref-height: 11;
+}
+
+.batch-progress-bar > .bar {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #4a3896, #7c5ce8);
+    -fx-background-radius: 3;
+    -fx-background-insets: 1;
+}
+
+.batch-progress-bar > .track {
+    -fx-background-color: #1a1630;
+    -fx-background-radius: 3;
+    -fx-background-insets: 0;
+}
+
+.progress-pct-small {
+    -fx-text-fill: rgba(220,210,255,0.90);
+    -fx-font-size: 9px;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.70), 3, 0, 0, 0);
+}
+
+/* ── Divisores del SplitPane ─────────────────────────────── */
+
+.split-pane > .split-pane-divider {
+    -fx-background-color: #28234a;
+    -fx-padding: 0 2 0 2;
+}
+
+.split-pane {
+    -fx-background-color: #13111d;
+}
+
+/* ── Modos responsivos ───────────────────────────────────── */
 
 .compact-mode .tool-bar .button,
 .compact-mode .tool-bar .toggle-button {
-    -fx-font-size: 13px;
-    -fx-padding: 9 12 9 12;
-}
-
-.compact-mode .section-title {
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
+    -fx-padding: 7 10 7 10;
 }
 
 .compact-mode .palette-button {
-    -fx-pref-width: 156;
-    -fx-min-height: 46;
-    -fx-font-size: 13px;
+    -fx-pref-width: 154;
+    -fx-min-height: 42;
+    -fx-font-size: 12px;
+}
+
+.compact-mode .section-title {
+    -fx-font-size: 10px;
 }
 
 .phone-mode {
@@ -228,20 +378,13 @@
     -fx-padding: 10;
 }
 
-.phone-mode .side-palette {
-    -fx-border-width: 0;
-}
-
 .phone-mode .palette-button {
-    -fx-pref-width: 132;
-    -fx-min-height: 44;
-    -fx-font-size: 12px;
+    -fx-pref-width: 118;
+    -fx-min-height: 38;
+    -fx-font-size: 11px;
 }
 
 .touch-mode .button,
-.touch-mode .toggle-button,
-.touch-mode .list-cell,
-.touch-mode .text-field {
+.touch-mode .toggle-button {
     -fx-min-height: 44;
 }
-

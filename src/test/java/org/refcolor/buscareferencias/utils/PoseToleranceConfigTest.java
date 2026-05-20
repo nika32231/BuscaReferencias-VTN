@@ -17,7 +17,11 @@ class PoseToleranceConfigTest {
 
     @Test
     void localImageDirDefaultsToCacheThumbnails() {
-        assertEquals("cache/thumbnails", PoseToleranceConfig.localImageDir());
+        String dir = PoseToleranceConfig.localImageDir();
+        assertNotNull(dir);
+        assertFalse(dir.isBlank());
+        assertTrue(dir.replace('\\', '/').endsWith("cache/thumbnails"),
+                "La ruta debe terminar en cache/thumbnails, pero fue: " + dir);
     }
 
     @Test

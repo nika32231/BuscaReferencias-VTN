@@ -11,6 +11,7 @@ import java.util.Map;
 public class PoseData {
     private final Map<AnatomyPart, Point2D> joints = new HashMap<>();
     private final Map<Integer, Point2D> landmarks = new HashMap<>();
+    private final Map<Integer, Double> landmarkVisibility = new HashMap<>();
     private final List<Double> embedding = new ArrayList<>();
     private final Map<String, Double> poseAngles = new LinkedHashMap<>();
 
@@ -28,6 +29,44 @@ public class PoseData {
 
     public void addLandmark(int id, double x, double y) {
         landmarks.put(id, new Point2D(x, y));
+    }
+
+    public void addLandmark(int id, double x, double y, double visibility) {
+        landmarks.put(id, new Point2D(x, y));
+        if (visibility >= 0) {
+            landmarkVisibility.put(id, visibility);
+        }
+    }
+
+    public double getLandmarkVisibility(int id) {
+        return landmarkVisibility.getOrDefault(id, -1.0);
+    }
+
+    public boolean hasVisibilityData() {
+        return !landmarkVisibility.isEmpty();
+    }
+
+    /**
+     * Devuelve las regiones corporales visibles en esta pose (umbral de visibilidad 0.5).
+     * Regiones: HEAD (lm 0-4), UPPER (lm 11-12), ARMS (lm 13-16), LOWER (lm 23-28).
+     */
+    public java.util.Set<String> getVisibleRegions() {
+        java.util.Set<String> regions = new java.util.HashSet<>();
+        if (!hasVisibilityData()) return regions;
+        double threshold = 0.5;
+        for (int id : new int[]{0, 1, 2, 3, 4}) {
+            if (landmarkVisibility.getOrDefault(id, 0.0) > threshold) { regions.add("HEAD"); break; }
+        }
+        for (int id : new int[]{11, 12}) {
+            if (landmarkVisibility.getOrDefault(id, 0.0) > threshold) { regions.add("UPPER"); break; }
+        }
+        for (int id : new int[]{13, 14, 15, 16}) {
+            if (landmarkVisibility.getOrDefault(id, 0.0) > threshold) { regions.add("ARMS"); break; }
+        }
+        for (int id : new int[]{23, 24, 25, 26, 27, 28}) {
+            if (landmarkVisibility.getOrDefault(id, 0.0) > threshold) { regions.add("LOWER"); break; }
+        }
+        return regions;
     }
 
     //noinspection unused
@@ -76,6 +115,8 @@ public class PoseData {
             org.json.JSONObject p = new org.json.JSONObject();
             p.put("x", point.getX());
             p.put("y", point.getY());
+            double vis = landmarkVisibility.getOrDefault(id, -1.0);
+            if (vis >= 0) p.put("v", vis);
             json.put(String.valueOf(id), p);
         });
         return json.toString();
@@ -90,7 +131,12 @@ public class PoseData {
         org.json.JSONObject json = new org.json.JSONObject(jsonStr);
         json.keySet().forEach(key -> {
             org.json.JSONObject p = json.getJSONObject(key);
-            addLandmark(Integer.parseInt(key), p.getDouble("x"), p.getDouble("y"));
+            double vis = p.optDouble("v", -1.0);
+            if (vis >= 0) {
+                addLandmark(Integer.parseInt(key), p.getDouble("x"), p.getDouble("y"), vis);
+            } else {
+                addLandmark(Integer.parseInt(key), p.getDouble("x"), p.getDouble("y"));
+            }
         });
     }
 

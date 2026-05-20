@@ -1,45 +1,53 @@
 package org.refcolor.buscareferencias.controller;
 
 import java.awt.Desktop;
+import java.io.File;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
 import javafx.application.HostServices;
+import javafx.application.Platform;
+import javafx.concurrent.Task;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.scene.Cursor;
+import javafx.scene.Node;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
-import javafx.concurrent.Task;
 import javafx.scene.control.*;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TouchEvent;
-import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.FlowPane;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.geometry.Pos;
-import javafx.scene.Node;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
-import javafx.scene.control.SplitPane;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
-import java.net.URI;
+import javafx.stage.FileChooser;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.refcolor.buscareferencias.database.DatabaseManager;
 import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
-import org.refcolor.buscareferencias.utils.DrawingProcessor;
 import org.refcolor.buscareferencias.service.SearchService;
+import org.refcolor.buscareferencias.utils.DrawingProcessor;
 import org.refcolor.buscareferencias.utils.ProjectPaths;
 import org.refcolor.buscareferencias.utils.SearchTermGenerator;
-import org.refcolor.buscareferencias.database.DatabaseManager;
-import javafx.event.ActionEvent;
-import javafx.scene.Cursor;
-import java.time.Duration;
-import java.time.Instant;
 
 public class DrawingController {
 
@@ -55,37 +63,32 @@ public class DrawingController {
     @FXML private VBox sidePalette;
     @FXML private Label statusLabel;
     @FXML private ProgressBar progressBar;
+    @FXML private ProgressBar batchProgressBar;
+    @FXML private VBox progressWrapper;
+    @FXML private Label progressLabel;
+    @FXML private Label batchPctLabel;
+    @FXML private Label batchNumLabel;
     @FXML private ToggleButton btnDraw;
     @FXML private ToggleButton btnErase;
     @FXML private StackPane canvasContainer;
     @FXML private StackPane canvasRoot;
-    @FXML private VBox rightPanel;
     @FXML private SplitPane canvasGallerySplitPane;
-    @FXML private TitledPane searchPanel;
-    @FXML private Button togglePanelBtn;
-    @FXML private SplitPane mainSplitPane;
-
-    // Hito 2: Términos de búsqueda
-    @FXML private ListView<String> termsListView;
-    @FXML private TextField newTermField;
-
-    // Hito 3: Galería
     @FXML private FlowPane galleryPane;
 
     private GraphicsContext gc;
     private AnatomyPart currentPart = AnatomyPart.HEAD;
     private double lastX, lastY;
-    
+
     private final Deque<WritableImage> undoStack = new ArrayDeque<>();
     private final Deque<WritableImage> redoStack = new ArrayDeque<>();
 
     private ToggleGroup toolGroup;
     private PoseData lastAnalyzedPose;
     private HostServices hostServices;
-
     private int currentSearchId = -1;
 
-    private boolean rightPanelCollapsed = false;
+    private boolean resizingCanvas = false;
+    private double resizeStartX, resizeStartY, resizeStartW, resizeStartH;
 
     private static final double CANVAS_INITIAL_W = 900;
     private static final double CANVAS_INITIAL_H = 600;
@@ -93,18 +96,10 @@ public class DrawingController {
     private static final double CANVAS_MIN_H = 350;
     private static final double CANVAS_MAX_W = 1600;
     private static final double CANVAS_MAX_H = 1200;
-
-    private boolean resizingCanvas = false;
-    private double resizeStartX;
-    private double resizeStartY;
-    private double resizeStartW;
-    private double resizeStartH;
-
     private static final double BREAKPOINT_COMPACT = 1180;
     private static final double BREAKPOINT_PHONE = 820;
     private static final double CANVAS_VIEW_PADDING = 24;
 
-    private boolean responsiveForcedRightPanel = false;
     private boolean responsiveListenersAttached = false;
     private double currentGalleryImageSize = 150;
 
@@ -132,8 +127,6 @@ public class DrawingController {
 
         setupPalette();
         saveCurrentState();
-
-        // Resize manual para escritorio (esquina inferior) y auto-fit para web/móvil.
         setupManualCanvasResize();
         setupTouchInput();
         setupCanvasAutoFit();
@@ -143,10 +136,6 @@ public class DrawingController {
         logger.info("[UI] DrawingController.initialize() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
     }
 
-    /**
-     * Sustituye el auto-resize (que puede causar loops) por un resize manual controlado.
-     * Mantiene nitidez: NO reescala el contenido existente; solo expande el área en blanco.
-     */
     private void setupManualCanvasResize() {
         if (canvasRoot == null) return;
 
@@ -170,11 +159,9 @@ public class DrawingController {
             if (!resizingCanvas) return;
             double dx = e.getScreenX() - resizeStartX;
             double dy = e.getScreenY() - resizeStartY;
-
-            double newW = clamp(resizeStartW + dx, CANVAS_MIN_W, CANVAS_MAX_W);
-            double newH = clamp(resizeStartH + dy, CANVAS_MIN_H, CANVAS_MAX_H);
-
-            resizeCanvasKeepingContent((int) newW, (int) newH);
+            resizeCanvasKeepingContent(
+                    (int) clamp(resizeStartW + dx, CANVAS_MIN_W, CANVAS_MAX_W),
+                    (int) clamp(resizeStartH + dy, CANVAS_MIN_H, CANVAS_MAX_H));
             e.consume();
         });
 
@@ -190,18 +177,11 @@ public class DrawingController {
     }
 
     private void resizeCanvasKeepingContent(int newW, int newH) {
-        // Evitar trabajo si no cambia
         if ((int) canvas.getWidth() == newW && (int) canvas.getHeight() == newH) return;
-
         WritableImage snapshot = canvas.snapshot(null, null);
-
         canvas.setWidth(newW);
         canvas.setHeight(newH);
-
-        // Fondo blanco
         clearToWhite();
-
-        // Importante: NO escalamos. Dibujamos con el tamaño original para evitar pixelación.
         gc.drawImage(snapshot, 0, 0);
         drawCanvasFrame();
     }
@@ -219,7 +199,6 @@ public class DrawingController {
 
     private void attachResponsiveListeners() {
         if (canvas == null || responsiveListenersAttached) return;
-
         canvas.sceneProperty().addListener((obs, oldScene, newScene) -> {
             if (newScene == null) return;
             applyResponsiveMode(newScene.getWidth(), newScene.getHeight());
@@ -257,14 +236,6 @@ public class DrawingController {
         if (canvasGallerySplitPane != null) {
             canvasGallerySplitPane.setDividerPositions(phone ? 0.48 : 0.55);
         }
-
-        if (phone && !rightPanelCollapsed) {
-            setRightPanelCollapsed(true);
-            responsiveForcedRightPanel = true;
-        } else if (!phone && responsiveForcedRightPanel) {
-            setRightPanelCollapsed(false);
-            responsiveForcedRightPanel = false;
-        }
     }
 
     private void clearToWhite() {
@@ -275,10 +246,8 @@ public class DrawingController {
 
     private void drawCanvasFrame() {
         if (gc == null || canvas == null) return;
-
         double w = Math.max(1, canvas.getWidth());
         double h = Math.max(1, canvas.getHeight());
-
         gc.save();
         gc.setStroke(CANVAS_FRAME_COLOR);
         gc.setLineWidth(1.5);
@@ -288,33 +257,25 @@ public class DrawingController {
 
     private void setupCanvasAutoFit() {
         if (canvasRoot == null || canvasContainer == null || canvas == null) return;
-
         canvasRoot.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
         canvasRoot.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
         canvas.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
         canvas.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
-
         updateCanvasScaleToViewport();
     }
 
     private void updateCanvasScaleToViewport() {
         if (canvasRoot == null || canvasContainer == null || canvas == null) return;
-
         double availableW = Math.max(120, canvasRoot.getWidth() - CANVAS_VIEW_PADDING);
         double availableH = Math.max(120, canvasRoot.getHeight() - CANVAS_VIEW_PADDING);
-        double baseW = Math.max(1, canvas.getWidth());
-        double baseH = Math.max(1, canvas.getHeight());
-
-        double scale = Math.min(availableW / baseW, availableH / baseH);
+        double scale = Math.min(availableW / Math.max(1, canvas.getWidth()), availableH / Math.max(1, canvas.getHeight()));
         scale = clamp(scale, 0.35, 1.8);
-
         canvasContainer.setScaleX(scale);
         canvasContainer.setScaleY(scale);
     }
 
     private void setupGalleryResponsive() {
         if (galleryPane == null) return;
-
         galleryPane.widthProperty().addListener((obs, oldV, newV) -> applyGalleryResponsiveLayout());
         if (canvas != null) {
             canvas.sceneProperty().addListener((obs, oldScene, newScene) -> {
@@ -327,31 +288,23 @@ public class DrawingController {
 
     private void applyGalleryResponsiveLayout() {
         if (galleryPane == null) return;
-
         double sceneWidth = rootPane != null && rootPane.getScene() != null ? rootPane.getScene().getWidth() : 1400;
         double available = galleryPane.getWidth();
-        if (available <= 0) {
-            available = sceneWidth < BREAKPOINT_PHONE ? 320 : 760;
-        }
+        if (available <= 0) available = sceneWidth < BREAKPOINT_PHONE ? 320 : 760;
 
         double target = sceneWidth < BREAKPOINT_PHONE ? 120 : (sceneWidth < BREAKPOINT_COMPACT ? 136 : 150);
         int cols = Math.max(2, (int) Math.floor((available + 12) / (target + 12)));
-        double imageSize = (available - ((cols - 1) * 12)) / cols;
-        currentGalleryImageSize = clamp(imageSize, 104, 170);
-
+        currentGalleryImageSize = clamp((available - ((cols - 1) * 12.0)) / cols, 104, 170);
         galleryPane.setPrefWrapLength(available);
         refreshGalleryCardsSize();
     }
 
     private void refreshGalleryCardsSize() {
         if (galleryPane == null) return;
-
-        double cardW = currentGalleryImageSize + 10;
-        double cardH = currentGalleryImageSize + 56;
         for (Node n : galleryPane.getChildren()) {
             if (!(n instanceof VBox card)) continue;
-            card.setPrefWidth(cardW);
-            card.setPrefHeight(cardH);
+            card.setPrefWidth(currentGalleryImageSize + 10);
+            card.setPrefHeight(currentGalleryImageSize + 56);
             for (Node child : card.getChildren()) {
                 if (child instanceof ImageView iv) {
                     iv.setFitWidth(currentGalleryImageSize);
@@ -365,9 +318,7 @@ public class DrawingController {
         javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
         undoStack.push(canvas.snapshot(params, null));
-        if (undoStack.size() > UNDO_STACK_LIMIT) {
-            undoStack.removeLast();
-        }
+        if (undoStack.size() > UNDO_STACK_LIMIT) undoStack.removeLast();
     }
 
     private void setupPalette() {
@@ -376,46 +327,56 @@ public class DrawingController {
             ToggleButton colorBtn = new ToggleButton(part.getName());
             colorBtn.setToggleGroup(paletteGroup);
             colorBtn.getStyleClass().add("palette-button");
-            
-            // Cuadro de color más grande para ser más visual
-            Rectangle colorSquare = new Rectangle(18, 18, Color.web(part.getHexColor()));
-            colorSquare.setStroke(Color.BLACK);
-            colorSquare.setStrokeWidth(1);
-            colorBtn.setGraphic(colorSquare);
-            colorBtn.setGraphicTextGap(12);
 
+            // Swatch circular más grande y suave
+            javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(10, Color.web(part.getHexColor()));
+            dot.setStroke(Color.rgb(255, 255, 255, 0.18));
+            dot.setStrokeWidth(1.5);
+            colorBtn.setGraphic(dot);
+            colorBtn.setGraphicTextGap(10);
             colorBtn.setTooltip(new Tooltip("Pintar: " + part.getName()));
+
+            // Estilo con borde izquierdo del color de la parte
+            applyPaletteButtonStyle(colorBtn, part, false);
+
+            colorBtn.selectedProperty().addListener((obs, was, now) ->
+                    applyPaletteButtonStyle(colorBtn, part, now));
 
             colorBtn.setOnAction(e -> {
                 currentPart = part;
                 btnDraw.setSelected(true);
-                statusLabel.setText("Herramienta: Dibujar - " + part.getName());
+                statusLabel.setText("Dibujando: " + part.getName());
                 gc.setStroke(Color.web(currentPart.getHexColor()));
             });
-            
-            if (part == AnatomyPart.HEAD) {
-                colorBtn.setSelected(true);
-            }
-            
+
+            if (part == AnatomyPart.HEAD) colorBtn.setSelected(true);
             paletteContainer.getChildren().add(colorBtn);
         }
     }
 
-    @FXML
-    private void handleMousePressed(MouseEvent e) {
-        beginStroke(e.getX(), e.getY());
+    private static void applyPaletteButtonStyle(ToggleButton btn, AnatomyPart part, boolean selected) {
+        String hex = part.getHexColor();
+        Color c = Color.web(hex);
+        // Fondo tintado al 12% del color de la parte cuando está seleccionado
+        String tint = String.format("rgba(%d,%d,%d,0.12)",
+                (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));
+        if (selected) {
+            btn.setStyle(
+                "-fx-border-color: " + hex + " transparent " + hex + " " + hex + ";" +
+                "-fx-border-width: 1 0 1 3;" +
+                "-fx-background-color: " + tint + ";"
+            );
+        } else {
+            btn.setStyle(
+                "-fx-border-color: transparent transparent transparent " + hex + ";" +
+                "-fx-border-width: 0 0 0 3;"
+            );
+        }
     }
 
-    @FXML
-    private void handleMouseDragged(MouseEvent e) {
-        continueStroke(e.getX(), e.getY());
-    }
-
-    @FXML
-    private void handleMouseReleased(MouseEvent e) {
-        // e se mantiene por firma FXML
-        finishStroke();
-    }
+    @FXML private void handleMousePressed(MouseEvent e)  { beginStroke(e.getX(), e.getY()); }
+    @FXML private void handleMouseDragged(MouseEvent e)  { continueStroke(e.getX(), e.getY()); }
+    @FXML private void handleMouseReleased(MouseEvent e) { finishStroke(); }
 
     @FXML
     private void handleTouchPressed(TouchEvent e) {
@@ -432,17 +393,11 @@ public class DrawingController {
     }
 
     @FXML
-    private void handleTouchReleased(TouchEvent e) {
-        finishStroke();
-        e.consume();
-    }
+    private void handleTouchReleased(TouchEvent e) { finishStroke(); e.consume(); }
 
     private void beginStroke(double x, double y) {
         redoStack.clear();
-
-        lastX = x;
-        lastY = y;
-
+        lastX = x; lastY = y;
         if (btnErase.isSelected()) {
             gc.setFill(Color.WHITE);
             gc.fillRect(x - 10, y - 10, 20, 20);
@@ -463,15 +418,11 @@ public class DrawingController {
             gc.lineTo(x, y);
             gc.stroke();
         }
-        lastX = x;
-        lastY = y;
+        lastX = x; lastY = y;
     }
 
     private void finishStroke() {
-        if (!btnErase.isSelected()) {
-            gc.stroke();
-            gc.closePath();
-        }
+        if (!btnErase.isSelected()) { gc.stroke(); gc.closePath(); }
         saveCurrentState();
     }
 
@@ -485,15 +436,10 @@ public class DrawingController {
 
     @FXML
     private void handleUndo() {
-        if (undoStack.size() > 1) { // Necesitamos al menos 2 estados (el actual y el anterior)
-            // Quitamos el estado actual (que es el que acabamos de dibujar)
+        if (undoStack.size() > 1) {
             redoStack.push(undoStack.pop());
-            
-            // Miramos el estado anterior
-            WritableImage previousImage = undoStack.peek();
-            
             clearToWhite();
-            gc.drawImage(previousImage, 0, 0);
+            gc.drawImage(undoStack.peek(), 0, 0);
             statusLabel.setText("Deshacer realizado");
         }
     }
@@ -501,29 +447,59 @@ public class DrawingController {
     @FXML
     private void handleRedo() {
         if (!redoStack.isEmpty()) {
-            WritableImage nextImage = redoStack.pop();
-            undoStack.push(nextImage);
-            
+            WritableImage next = redoStack.pop();
+            undoStack.push(next);
             clearToWhite();
-            gc.drawImage(nextImage, 0, 0);
+            gc.drawImage(next, 0, 0);
             statusLabel.setText("Rehacer realizado");
         }
     }
 
+    private void setSearchProgress(boolean visible, double batchPct, double totalPct, int round, int totalRounds) {
+        progressWrapper.setVisible(visible);
+        progressWrapper.setManaged(visible);
+        if (!visible) {
+            batchNumLabel.setText("");
+            return;
+        }
+        // Batch bar
+        double b = Math.min(1.0, Math.max(0.0, batchPct));
+        batchProgressBar.setProgress(b);
+        batchPctLabel.setText(b > 0 ? String.format("%.0f%%", b * 100) : "");
+        // Total bar
+        double t = Math.min(1.0, Math.max(0.0, totalPct));
+        progressBar.setProgress(t);
+        progressLabel.setText(String.format("%.0f%%", t * 100));
+        // Batch counter badge
+        if (totalRounds > 1) {
+            batchNumLabel.setText(String.format("Lote %d/%d", round, totalRounds));
+        } else {
+            batchNumLabel.setText(round > 0 ? "Analizando..." : "");
+        }
+    }
+
+    private void setSearchProgress(boolean visible, double indeterminate) {
+        progressWrapper.setVisible(visible);
+        progressWrapper.setManaged(visible);
+        if (!visible) { batchNumLabel.setText(""); return; }
+        batchProgressBar.setProgress(indeterminate);
+        batchPctLabel.setText("");
+        progressBar.setProgress(indeterminate);
+        progressLabel.setText("");
+        batchNumLabel.setText("");
+    }
+
     @FXML
     private void handleLocalPhotoSearch() {
-        statusLabel.setText("Buscando en fotos locales...");
-        progressBar.setVisible(true);
-        progressBar.setProgress(-1);
+        statusLabel.setText("Analizando dibujo...");
+        setSearchProgress(true, 0.0, 0.0, 0, 1);
         galleryPane.getChildren().clear();
 
         javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
         final WritableImage snapshot = canvas.snapshot(params, null);
 
-        List<String> terms = termsListView.getItems() == null
-                ? new ArrayList<>()
-                : new ArrayList<>(termsListView.getItems());
+        AtomicReference<PoseData> computedPoseRef = new AtomicReference<>();
 
         Task<List<ImageResult>> searchTask = new Task<>() {
             @Override
@@ -532,35 +508,43 @@ public class DrawingController {
                 if (pose == null || pose.getAllJoints().isEmpty()) {
                     pose = DrawingProcessor.processImage(snapshot);
                 }
-                if (terms.isEmpty() && pose != null && !pose.getAllJoints().isEmpty()) {
-                    terms.addAll(SearchTermGenerator.generateTerms(pose));
-                }
+                computedPoseRef.set(pose);
+
                 if (pose != null && !pose.getAllJoints().isEmpty()) {
-                    return SearchService.searchImages(terms, pose);
+                    List<String> terms = SearchTermGenerator.generateTerms(pose);
+                    final int partCount = pose.getAllJoints().size();
+                    currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
+                    Platform.runLater(() ->
+                            statusLabel.setText("Pose detectada (" + partCount + " partes). Buscando en fotos...")
+                    );
+                    return SearchService.searchImages(terms, pose,
+                            msg -> Platform.runLater(() -> statusLabel.setText(msg)),
+                            p -> Platform.runLater(() ->
+                                setSearchProgress(true, p[0], p[1], (int) p[2], (int) p[3]))
+                    );
                 }
-                return SearchService.searchLocalPhotos(terms, org.refcolor.buscareferencias.utils.PoseToleranceConfig.maxResults());
+                Platform.runLater(() -> statusLabel.setText("Sin pose detectada. Mostrando fotos recientes..."));
+                return SearchService.searchLocalPhotos(List.of(), org.refcolor.buscareferencias.utils.PoseToleranceConfig.maxResults());
             }
         };
 
         searchTask.setOnSucceeded(e -> {
-            PoseData poseFromTask = lastAnalyzedPose;
-            if (poseFromTask == null || poseFromTask.getAllJoints().isEmpty()) {
-                PoseData analyzed = DrawingProcessor.processImage(snapshot);
-                if (!analyzed.getAllJoints().isEmpty()) {
-                    lastAnalyzedPose = analyzed;
-                    if (termsListView.getItems().isEmpty()) {
-                        termsListView.getItems().setAll(SearchTermGenerator.generateTerms(analyzed));
-                    }
-                }
+            PoseData pose = computedPoseRef.get();
+            if (pose != null && !pose.getAllJoints().isEmpty()) {
+                lastAnalyzedPose = pose;
             }
 
             List<ImageResult> results = searchTask.getValue();
+            galleryPane.getChildren().clear();
             displayResults(results);
-            progressBar.setVisible(false);
+            setSearchProgress(false, -1);
+
             if (results.isEmpty()) {
                 statusLabel.setText(buildEmptySearchMessage());
             } else {
-                statusLabel.setText(String.format("OK: %d fotos (ordenadas por similitud).", results.size()));
+                double best = results.stream().mapToDouble(ImageResult::getScore).filter(s -> s >= 0).max().orElse(0);
+                statusLabel.setText(String.format("Búsqueda completada: %d fotos · mejor similitud %.0f%%",
+                        results.size(), best * 100));
                 if (currentSearchId != -1) {
                     DatabaseManager.saveResults(currentSearchId, results);
                 }
@@ -568,19 +552,88 @@ public class DrawingController {
         });
 
         searchTask.setOnFailed(e -> {
-            progressBar.setVisible(false);
-            statusLabel.setText("Error en la búsqueda local. Revisa logs.");
+            setSearchProgress(false, -1);
+            statusLabel.setText("Error en la búsqueda. Revisa logs.");
             logger.error("Error en búsqueda local", searchTask.getException());
         });
 
         new Thread(searchTask).start();
     }
 
+    @FXML
+    private void handleAddPhotos() {
+        Path targetDir = ProjectPaths.getThumbnailsDirectory();
+
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Añadir fotos a la biblioteca de referencias");
+        chooser.getExtensionFilters().add(
+                new FileChooser.ExtensionFilter("Imágenes", "*.jpg", "*.jpeg", "*.png", "*.webp", "*.gif")
+        );
+        // Abrir directamente en la carpeta de la biblioteca
+        try {
+            Files.createDirectories(targetDir);
+            chooser.setInitialDirectory(targetDir.toFile());
+        } catch (Exception ignored) {}
+
+        List<File> files = chooser.showOpenMultipleDialog(canvas.getScene().getWindow());
+        if (files == null || files.isEmpty()) return;
+
+        setSearchProgress(true, -1);
+        statusLabel.setText("Copiando " + files.size() + " foto(s)...");
+
+        Task<Integer> copyTask = new Task<>() {
+            @Override
+            protected Integer call() throws Exception {
+                Files.createDirectories(targetDir);
+                int copied = 0;
+                for (File file : files) {
+                    // Si el archivo ya está en la carpeta, no hace falta copiar
+                    if (file.toPath().getParent().toAbsolutePath().equals(targetDir.toAbsolutePath())) {
+                        copied++;
+                        continue;
+                    }
+                    Path dest = resolveDestPath(targetDir, file.getName());
+                    Files.copy(file.toPath(), dest, StandardCopyOption.REPLACE_EXISTING);
+                    copied++;
+                }
+                return copied;
+            }
+        };
+
+        copyTask.setOnSucceeded(e -> {
+            setSearchProgress(false, 0.0);
+            int copied = copyTask.getValue();
+            statusLabel.setText(copied + " foto(s) añadidas a la biblioteca.");
+            logger.info("[FOTOS] {} imágenes añadidas a {}", copied, targetDir);
+        });
+
+        copyTask.setOnFailed(e -> {
+            setSearchProgress(false, 0.0);
+            String msg = copyTask.getException() != null ? copyTask.getException().getMessage() : "error desconocido";
+            statusLabel.setText("Error al añadir fotos: " + msg);
+            logger.error("Error copiando fotos a la biblioteca", copyTask.getException());
+        });
+
+        new Thread(copyTask).start();
+    }
+
+    private static Path resolveDestPath(Path dir, String fileName) {
+        Path dest = dir.resolve(fileName);
+        if (!Files.exists(dest)) return dest;
+        int dot = fileName.lastIndexOf('.');
+        String base = dot > 0 ? fileName.substring(0, dot) : fileName;
+        String ext  = dot > 0 ? fileName.substring(dot) : "";
+        int counter = 1;
+        do {
+            dest = dir.resolve(base + "_" + counter + ext);
+            counter++;
+        } while (Files.exists(dest));
+        return dest;
+    }
+
     private void displayResults(List<ImageResult> results) {
         applyGalleryResponsiveLayout();
-        if (results == null || results.isEmpty()) {
-            return;
-        }
+        if (results == null || results.isEmpty()) return;
 
         int rank = 1;
         for (ImageResult result : results) {
@@ -597,14 +650,11 @@ public class DrawingController {
 
             try {
                 String thumbUrl = result.getDisplayThumbnailUrl() == null || result.getDisplayThumbnailUrl().isBlank()
-                        ? result.getThumbnailUrl()
-                        : result.getDisplayThumbnailUrl();
+                        ? result.getThumbnailUrl() : result.getDisplayThumbnailUrl();
                 Image img = new Image(thumbUrl, currentGalleryImageSize, currentGalleryImageSize, true, true, true);
                 iv.setImage(img);
                 img.exceptionProperty().addListener((obs, oldEx, newEx) -> {
-                    if (newEx != null) {
-                        logger.warn("Error al cargar imagen: {}", thumbUrl);
-                    }
+                    if (newEx != null) logger.warn("Error al cargar imagen: {}", thumbUrl);
                 });
             } catch (Exception e) {
                 logger.warn("Error al instanciar imagen: {}", result.getThumbnailUrl());
@@ -619,198 +669,62 @@ public class DrawingController {
             if (result.getScore() <= 0.0) {
                 label = new Label(String.format("#%d · %s", rank,
                         result.getTitle() == null || result.getTitle().isBlank() ? "Referencia" : result.getTitle()));
-                label.setStyle("-fx-font-size: 12px; -fx-text-fill: #b9beca;");
+                label.setStyle("-fx-font-size: 11px; -fx-text-fill: #8880b0;");
             } else {
-                double scorePercent = result.getScore() * 100;
-                label = new Label(String.format("#%d · %.0f%%", rank, scorePercent));
-                if (scorePercent >= 60) {
-                    label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;");
-                } else {
-                    label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #c62828;");
-                }
+                double pct = result.getScore() * 100;
+                label = new Label(String.format("%.0f%% similitud", pct));
+                label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 3 8 3 8;" +
+                    "-fx-background-radius: 8; -fx-background-color: " +
+                    (pct >= 60 ? "rgba(104,211,145,0.18); -fx-text-fill: #68d391;"
+                               : "rgba(252,129,129,0.18); -fx-text-fill: #fc8181;"));
             }
 
             card.getChildren().addAll(imageStack, label);
             card.setCursor(Cursor.HAND);
             Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
-
             card.setOnMouseClicked(e -> openResultSource(result));
             galleryPane.getChildren().add(card);
             rank++;
         }
         refreshGalleryCardsSize();
-        logger.info("[GALLERY] Results rendered: {} items", results.size());
-    }
-
-    @FXML
-    private void handleSearch() {
-        statusLabel.setText("Procesando dibujo...");
-        progressBar.setVisible(true);
-        progressBar.setProgress(-1);
-        
-        // 1. CAPTURA DEL SNAPSHOT EN EL HILO DE LA UI
-        // Esta es la operación que lanzaba IllegalStateException antes
-        javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
-        params.setFill(Color.TRANSPARENT);
-        final WritableImage snapshot = canvas.snapshot(params, null);
-
-        // 2. PROCESAMIENTO PESADO EN HILO SECUNDARIO
-        Task<PoseData> analyzeTask = new Task<>() {
-            @Override
-            protected PoseData call() {
-                // Pasamos la imagen capturada para procesarla píxel a píxel
-                return DrawingProcessor.processImage(snapshot);
-            }
-        };
-
-        analyzeTask.setOnSucceeded(e -> {
-            PoseData pose = analyzeTask.getValue();
-            this.lastAnalyzedPose = pose;
-            progressBar.setVisible(false);
-            if (pose.getAllJoints().isEmpty()) {
-                statusLabel.setText("No se detectaron colores anatómicos.");
-            } else {
-                statusLabel.setText("Colores detectados: " + pose.getAllJoints().size());
-                
-                // Hito 2: Generar términos
-                List<String> terms = SearchTermGenerator.generateTerms(pose);
-                logger.info("[SEARCH] Terms generated: {}", terms);
-                termsListView.getItems().setAll(terms);
-                
-                // Hito 2: Guardar en Base de Datos (inicialmente sin resultados)
-                currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
-                // Restauramos a INFO para que se vea en terminal, pero con mensaje descriptivo
-                logger.info("Análisis de pose completado con éxito. Términos: {}", terms);
-                // Además imprimimos por System.out para asegurar que el usuario lo vea sin colores de error
-                logger.info("RESULTADO ANÁLISIS: {}", pose);
-            }
-        });
-
-        analyzeTask.setOnFailed(e -> {
-            progressBar.setVisible(false);
-            statusLabel.setText("Error en el análisis.");
-            // Nivel INFO para el error también si queremos evitar el rojo de SEVERE en terminales de IDE
-            logger.info("AVISO: Error durante el análisis del dibujo. Comprueba los trazos.");
-        });
-
-        new Thread(analyzeTask).start();
-    }
-
-    @FXML
-    private void handleAddTerm(ActionEvent event) {
-        try {
-            if (newTermField == null || termsListView == null) {
-                logger.warn("UI no inicializada: newTermField o termsListView es null");
-                return;
-            }
-
-            String term = newTermField.getText() == null ? "" : newTermField.getText().trim();
-            if (term.isEmpty()) {
-                return;
-            }
-
-            termsListView.getItems().add(term);
-            newTermField.clear();
-        } catch (Exception e) {
-            logger.error("Error añadiendo término", e);
-            if (statusLabel != null) {
-                statusLabel.setText("No se pudo añadir el término");
-            }
-        }
-    }
-
-    @FXML
-    private void toggleRightPanel(ActionEvent event) {
-        responsiveForcedRightPanel = false;
-        setRightPanelCollapsed(!rightPanelCollapsed);
-    }
-
-    private void setRightPanelCollapsed(boolean collapsed) {
-        if (mainSplitPane == null || rightPanel == null) {
-            if (searchPanel != null) {
-                boolean expanded = searchPanel.isExpanded();
-                searchPanel.setExpanded(!expanded);
-                if (togglePanelBtn != null) {
-                    togglePanelBtn.setText(expanded ? "⏴" : "⏵");
-                }
-            }
-            return;
-        }
-
-        rightPanelCollapsed = collapsed;
-        if (collapsed) {
-            rightPanel.setManaged(false);
-            rightPanel.setVisible(false);
-            if (togglePanelBtn != null) togglePanelBtn.setText("⏵");
-            mainSplitPane.setDividerPositions(1.0);
-        } else {
-            rightPanel.setManaged(true);
-            rightPanel.setVisible(true);
-            if (togglePanelBtn != null) togglePanelBtn.setText("⏴");
-            mainSplitPane.setDividerPositions(0.78);
-        }
+        logger.info("[GALLERY] {} resultados mostrados", results.size());
     }
 
     private String buildEmptySearchMessage() {
         try {
-            java.nio.file.Path dir = ProjectPaths.getThumbnailsDirectory();
-            long count = java.nio.file.Files.list(dir).filter(java.nio.file.Files::isRegularFile).count();
-            if (count == 0) {
-                return "No hay fotos en: " + dir;
-            }
-            return "Hay " + count + " fotos en caché pero no se pudo analizar la pose. "
-                    + "Reinstala Python (.venv + requirements.txt) y dibuja con el color de la cabeza.";
+            Path dir = ProjectPaths.getThumbnailsDirectory();
+            long count = Files.list(dir).filter(Files::isRegularFile).count();
+            if (count == 0) return "No hay fotos en: " + dir + "  · Usa ➕ Añadir fotos para empezar.";
+            return "Hay " + count + " fotos pero no se pudo analizar la pose. "
+                    + "Asegúrate de tener Python con MediaPipe instalado.";
         } catch (Exception e) {
-            return "Sin resultados. Revisa cache/thumbnails y el entorno Python.";
+            return "Sin resultados. Usa ➕ Añadir fotos o revisa el entorno Python.";
         }
     }
 
     private String buildTooltip(ImageResult result, int rank) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("Posición: #").append(rank);
-        if (result.getTitle() != null && !result.getTitle().isBlank()) {
+        StringBuilder sb = new StringBuilder("Posición: #").append(rank);
+        if (result.getTitle() != null && !result.getTitle().isBlank())
             sb.append("\n").append(result.getTitle());
-        }
-        if (result.getScore() > 0.0) {
+        if (result.getScore() > 0.0)
             sb.append("\n").append(String.format("Similitud: %.0f%%", result.getScore() * 100.0));
-        }
-        if (result.getSource() != null && !result.getSource().isBlank()) {
-            if (sb.length() > 0) sb.append("\n");
-            sb.append("Fuente: ").append(result.getSource());
-        }
-        if (result.getSearchQuery() != null && !result.getSearchQuery().isBlank()) {
-            if (sb.length() > 0) sb.append("\n");
-            sb.append("Búsqueda: ").append(result.getSearchQuery());
-        }
-        String sourcePageUrl = result.getSourcePageUrl();
-        if (sourcePageUrl != null && !sourcePageUrl.isBlank()) {
-            if (sb.length() > 0) sb.append("\n");
-            sb.append(sourcePageUrl);
-        }
-        sb.append("\nHaz clic para abrir el archivo local");
+        sb.append("\nHaz clic para abrir el archivo");
         return sb.toString();
     }
 
     private void openResultSource(ImageResult result) {
         String target = result.getOriginalUrl();
-        if (target == null || target.isBlank()) {
-            target = result.getDisplayThumbnailUrl();
-        }
-        if (target == null || target.isBlank()) {
-            logger.warn("No hay ruta local para abrir en la galería.");
-            return;
-        }
-
+        if (target == null || target.isBlank()) target = result.getDisplayThumbnailUrl();
+        if (target == null || target.isBlank()) { logger.warn("Sin ruta local para abrir."); return; }
         try {
             if (Desktop.isDesktopSupported()) {
-                java.nio.file.Path path = target.startsWith("file:")
+                Path path = target.startsWith("file:")
                         ? java.nio.file.Paths.get(URI.create(target))
                         : java.nio.file.Paths.get(target);
                 Desktop.getDesktop().open(path.toFile());
             }
         } catch (Exception e) {
-            logger.error("No se pudo abrir el archivo local: {}", target, e);
+            logger.error("No se pudo abrir: {}", target, e);
         }
     }
-
 }

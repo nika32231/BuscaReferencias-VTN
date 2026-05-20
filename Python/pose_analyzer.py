@@ -188,7 +188,17 @@ def generate_pose_angles(landmarks):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    if len(sys.argv) >= 2 and sys.argv[1] == "--batch":
+        # Modo batch: lee rutas de stdin (una por línea), carga el modelo UNA sola vez
+        # y analiza todas las imágenes en secuencia. Imprime un JSON por línea.
+        for line in sys.stdin:
+            path = line.strip()
+            if not path:
+                continue
+            result = analyze_image(path)
+            result["_path"] = path
+            print(json.dumps(result), flush=True)
+    elif len(sys.argv) < 2:
         print(json.dumps({"error": "No image path provided"}))
     else:
         print(json.dumps(analyze_image(sys.argv[1])))
