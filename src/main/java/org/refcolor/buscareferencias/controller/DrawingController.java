@@ -41,10 +41,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.refcolor.buscareferencias.database.DatabaseManager;
+import org.refcolor.buscareferencias.i18n.I18n;
 import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
 import org.refcolor.buscareferencias.service.SearchService;
+import org.refcolor.buscareferencias.tutorial.TutorialOverlay;
 import org.refcolor.buscareferencias.utils.DrawingProcessor;
 import org.refcolor.buscareferencias.utils.ProjectPaths;
 import org.refcolor.buscareferencias.utils.SearchTermGenerator;
@@ -70,6 +72,19 @@ public class DrawingController {
     @FXML private Label batchNumLabel;
     @FXML private ToggleButton btnDraw;
     @FXML private ToggleButton btnErase;
+    @FXML private Button btnSearch;
+    @FXML private Button btnAddPhotos;
+    @FXML private Button btnHelp;
+    @FXML private Button btnLang;
+    @FXML private Button btnClear;
+    @FXML private Button btnUndo;
+    @FXML private Button btnRedo;
+    @FXML private ToolBar toolBar;
+    @FXML private Label lblPalette;
+    @FXML private Label lblGallery;
+    @FXML private Label lblStatusPrefix;
+    @FXML private Label lblBatch;
+    @FXML private Label lblTotal;
     @FXML private StackPane canvasContainer;
     @FXML private StackPane canvasRoot;
     @FXML private SplitPane canvasGallerySplitPane;
@@ -86,6 +101,7 @@ public class DrawingController {
     private PoseData lastAnalyzedPose;
     private HostServices hostServices;
     private int currentSearchId = -1;
+    private TutorialOverlay tutorialOverlay;
 
     private boolean resizingCanvas = false;
     private double resizeStartX, resizeStartY, resizeStartW, resizeStartH;
@@ -132,6 +148,11 @@ public class DrawingController {
         setupCanvasAutoFit();
         attachResponsiveListeners();
         setupGalleryResponsive();
+        setupTutorial();
+
+        // i18n: apply initial locale texts and register listener for language changes
+        I18n.addChangeListener(() -> Platform.runLater(this::applyI18n));
+        applyI18n();
 
         logger.info("[UI] DrawingController.initialize() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
     }
@@ -170,7 +191,7 @@ public class DrawingController {
             resizingCanvas = false;
             saveCurrentState();
             if (statusLabel != null) {
-                statusLabel.setText("Lienzo: " + (int) canvas.getWidth() + "x" + (int) canvas.getHeight());
+                statusLabel.setText(I18n.fmt("status.canvasSize", (int) canvas.getWidth(), (int) canvas.getHeight()));
             }
             e.consume();
         });
@@ -322,11 +343,14 @@ public class DrawingController {
     }
 
     private void setupPalette() {
+        AnatomyPart selected = currentPart != null ? currentPart : AnatomyPart.HEAD;
         ToggleGroup paletteGroup = new ToggleGroup();
         for (AnatomyPart part : AnatomyPart.values()) {
-            ToggleButton colorBtn = new ToggleButton(part.getName());
+            String partName = I18n.t("anatomy." + part.name());
+            ToggleButton colorBtn = new ToggleButton(partName);
             colorBtn.setToggleGroup(paletteGroup);
             colorBtn.getStyleClass().add("palette-button");
+            colorBtn.setUserData(part); // for re-selection after rebuild
 
             // Swatch circular más grande y suave
             javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(10, Color.web(part.getHexColor()));
@@ -334,7 +358,7 @@ public class DrawingController {
             dot.setStrokeWidth(1.5);
             colorBtn.setGraphic(dot);
             colorBtn.setGraphicTextGap(10);
-            colorBtn.setTooltip(new Tooltip("Pintar: " + part.getName()));
+            colorBtn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
 
             // Estilo con borde izquierdo del color de la parte
             applyPaletteButtonStyle(colorBtn, part, false);
@@ -345,11 +369,11 @@ public class DrawingController {
             colorBtn.setOnAction(e -> {
                 currentPart = part;
                 btnDraw.setSelected(true);
-                statusLabel.setText("Dibujando: " + part.getName());
+                statusLabel.setText(I18n.fmt("status.drawing", I18n.t("anatomy." + part.name())));
                 gc.setStroke(Color.web(currentPart.getHexColor()));
             });
 
-            if (part == AnatomyPart.HEAD) colorBtn.setSelected(true);
+            if (part == selected) colorBtn.setSelected(true);
             paletteContainer.getChildren().add(colorBtn);
         }
     }
@@ -431,7 +455,7 @@ public class DrawingController {
         redoStack.clear();
         clearToWhite();
         saveCurrentState();
-        statusLabel.setText("Lienzo limpio");
+        statusLabel.setText(I18n.t("status.cleared"));
     }
 
     @FXML
@@ -440,7 +464,7 @@ public class DrawingController {
             redoStack.push(undoStack.pop());
             clearToWhite();
             gc.drawImage(undoStack.peek(), 0, 0);
-            statusLabel.setText("Deshacer realizado");
+            statusLabel.setText(I18n.t("status.undo"));
         }
     }
 
@@ -451,9 +475,123 @@ public class DrawingController {
             undoStack.push(next);
             clearToWhite();
             gc.drawImage(next, 0, 0);
-            statusLabel.setText("Rehacer realizado");
+            statusLabel.setText(I18n.t("status.redo"));
         }
     }
+
+    // ── Tutorial ──────────────────────────────────────────────────────────────
+
+    private void setupTutorial() {
+        rootPane.sceneProperty().addListener((obs, old, scene) -> {
+            if (scene == null) return;
+            // Wait for first layout pass so node bounds are valid
+            Platform.runLater(() -> Platform.runLater(() -> {
+                tutorialOverlay = buildTutorial();
+                if (!TutorialOverlay.hasSeenTutorial()) {
+                    tutorialOverlay.show();
+                }
+            }));
+        });
+    }
+
+    private TutorialOverlay buildTutorial() {
+        var steps = List.of(
+            new TutorialOverlay.Step(
+                "🎨", "tutorial.welcome.title", "tutorial.welcome.body"
+            ),
+            new TutorialOverlay.Step(
+                sidePalette, "🖌️", "tutorial.palette.title", "tutorial.palette.body"
+            ),
+            new TutorialOverlay.Step(
+                canvasContainer, "✏️", "tutorial.canvas.title", "tutorial.canvas.body"
+            ),
+            new TutorialOverlay.Step(
+                toolBar, "🛠", "tutorial.tools.title", "tutorial.tools.body"
+            ),
+            new TutorialOverlay.Step(
+                btnSearch, "🔍", "tutorial.search.title", "tutorial.search.body"
+            ),
+            new TutorialOverlay.Step(
+                btnAddPhotos, "📸", "tutorial.library.title", "tutorial.library.body"
+            ),
+            new TutorialOverlay.Step(
+                galleryPane, "🖼", "tutorial.gallery.title", "tutorial.gallery.body"
+            ),
+            new TutorialOverlay.Step(
+                "🚀", "tutorial.finish.title", "tutorial.finish.body"
+            )
+        );
+
+        TutorialOverlay t = new TutorialOverlay(rootPane, steps);
+        t.setOnFinish(TutorialOverlay::markSeen);
+        return t;
+    }
+
+    // ── i18n ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Actualiza todos los textos estáticos de la UI al idioma activo.
+     * Se llama en initialize() y cuando el usuario cambia el idioma.
+     * Siempre se ejecuta en el hilo de JavaFX.
+     */
+    private void applyI18n() {
+        // Toolbar buttons
+        if (btnClear    != null) btnClear.setText(I18n.t("toolbar.clear"));
+        if (btnUndo     != null) btnUndo.setText(I18n.t("toolbar.undo"));
+        if (btnRedo     != null) btnRedo.setText(I18n.t("toolbar.redo"));
+        if (btnDraw     != null) btnDraw.setText(I18n.t("toolbar.draw"));
+        if (btnErase    != null) btnErase.setText(I18n.t("toolbar.erase"));
+        if (btnSearch   != null) btnSearch.setText(I18n.t("toolbar.search"));
+        if (btnAddPhotos != null) btnAddPhotos.setText(I18n.t("toolbar.addPhotos"));
+        if (btnHelp     != null) btnHelp.setText(I18n.t("toolbar.help"));
+        // Language button: shows which language you will switch TO
+        if (btnLang != null) btnLang.setText(I18n.isEnglish() ? "🌐 ES" : "🌐 EN");
+
+        // Section labels
+        if (lblPalette      != null) lblPalette.setText(I18n.t("section.palette"));
+        if (lblGallery      != null) lblGallery.setText(I18n.t("section.gallery"));
+        if (lblStatusPrefix != null) lblStatusPrefix.setText(I18n.t("status.prefix"));
+        if (lblBatch        != null) lblBatch.setText(I18n.t("section.progress.batch"));
+        if (lblTotal        != null) lblTotal.setText(I18n.t("section.progress.total"));
+
+        // Initial status (only if it still shows the ready message)
+        if (statusLabel != null) {
+            String cur = statusLabel.getText();
+            // Update if it shows a ready-like message or empty
+            if (cur == null || cur.isBlank()
+                    || cur.equals("Listo para dibujar") || cur.equals("Ready to draw")) {
+                statusLabel.setText(I18n.t("status.ready"));
+            }
+        }
+
+        // Rebuild palette to translate anatomy part names
+        if (paletteContainer != null) {
+            paletteContainer.getChildren().clear();
+            setupPalette();
+        }
+
+        // Update tutorial if it's already built
+        if (tutorialOverlay != null) {
+            tutorialOverlay.applyI18n();
+        }
+    }
+
+    @FXML
+    private void handleLang() {
+        I18n.toggleLocale();
+        // applyI18n() will be called via the registered listener
+    }
+
+    @FXML
+    private void handleHelp() {
+        if (tutorialOverlay == null) {
+            tutorialOverlay = buildTutorial();
+        }
+        TutorialOverlay.resetSeen();
+        tutorialOverlay.show();
+    }
+
+    // ── Progress helpers ──────────────────────────────────────────────────────
 
     private void setSearchProgress(boolean visible, double batchPct, double totalPct, int round, int totalRounds) {
         progressWrapper.setVisible(visible);
@@ -472,9 +610,9 @@ public class DrawingController {
         progressLabel.setText(String.format("%.0f%%", t * 100));
         // Batch counter badge
         if (totalRounds > 1) {
-            batchNumLabel.setText(String.format("Lote %d/%d", round, totalRounds));
+            batchNumLabel.setText(I18n.fmt("status.batch", round, totalRounds));
         } else {
-            batchNumLabel.setText(round > 0 ? "Analizando..." : "");
+            batchNumLabel.setText(round > 0 ? I18n.t("status.analyzing.round") : "");
         }
     }
 
@@ -491,7 +629,7 @@ public class DrawingController {
 
     @FXML
     private void handleLocalPhotoSearch() {
-        statusLabel.setText("Analizando dibujo...");
+        statusLabel.setText(I18n.t("status.analyzing"));
         setSearchProgress(true, 0.0, 0.0, 0, 1);
         galleryPane.getChildren().clear();
 
@@ -504,10 +642,9 @@ public class DrawingController {
         Task<List<ImageResult>> searchTask = new Task<>() {
             @Override
             protected List<ImageResult> call() {
-                PoseData pose = lastAnalyzedPose;
-                if (pose == null || pose.getAllJoints().isEmpty()) {
-                    pose = DrawingProcessor.processImage(snapshot);
-                }
+                // Siempre re-analizar el lienzo actual para que cada búsqueda
+                // refleje el stickman que el usuario acaba de dibujar.
+                PoseData pose = DrawingProcessor.processImage(snapshot);
                 computedPoseRef.set(pose);
 
                 if (pose != null && !pose.getAllJoints().isEmpty()) {
@@ -515,7 +652,7 @@ public class DrawingController {
                     final int partCount = pose.getAllJoints().size();
                     currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
                     Platform.runLater(() ->
-                            statusLabel.setText("Pose detectada (" + partCount + " partes). Buscando en fotos...")
+                            statusLabel.setText(I18n.fmt("status.poseDetected", partCount))
                     );
                     return SearchService.searchImages(terms, pose,
                             msg -> Platform.runLater(() -> statusLabel.setText(msg)),
@@ -523,7 +660,7 @@ public class DrawingController {
                                 setSearchProgress(true, p[0], p[1], (int) p[2], (int) p[3]))
                     );
                 }
-                Platform.runLater(() -> statusLabel.setText("Sin pose detectada. Mostrando fotos recientes..."));
+                Platform.runLater(() -> statusLabel.setText(I18n.t("status.noPose")));
                 return SearchService.searchLocalPhotos(List.of(), org.refcolor.buscareferencias.utils.PoseToleranceConfig.maxResults());
             }
         };
@@ -543,8 +680,7 @@ public class DrawingController {
                 statusLabel.setText(buildEmptySearchMessage());
             } else {
                 double best = results.stream().mapToDouble(ImageResult::getScore).filter(s -> s >= 0).max().orElse(0);
-                statusLabel.setText(String.format("Búsqueda completada: %d fotos · mejor similitud %.0f%%",
-                        results.size(), best * 100));
+                statusLabel.setText(I18n.fmt("status.searchDone", results.size(), Math.round(best * 100)));
                 if (currentSearchId != -1) {
                     DatabaseManager.saveResults(currentSearchId, results);
                 }
@@ -553,7 +689,7 @@ public class DrawingController {
 
         searchTask.setOnFailed(e -> {
             setSearchProgress(false, -1);
-            statusLabel.setText("Error en la búsqueda. Revisa logs.");
+            statusLabel.setText(I18n.t("status.searchError"));
             logger.error("Error en búsqueda local", searchTask.getException());
         });
 
@@ -579,7 +715,7 @@ public class DrawingController {
         if (files == null || files.isEmpty()) return;
 
         setSearchProgress(true, -1);
-        statusLabel.setText("Copiando " + files.size() + " foto(s)...");
+        statusLabel.setText(I18n.fmt("status.copying", files.size()));
 
         Task<Integer> copyTask = new Task<>() {
             @Override
@@ -603,14 +739,14 @@ public class DrawingController {
         copyTask.setOnSucceeded(e -> {
             setSearchProgress(false, 0.0);
             int copied = copyTask.getValue();
-            statusLabel.setText(copied + " foto(s) añadidas a la biblioteca.");
+            statusLabel.setText(I18n.fmt("status.photosCopied", copied));
             logger.info("[FOTOS] {} imágenes añadidas a {}", copied, targetDir);
         });
 
         copyTask.setOnFailed(e -> {
             setSearchProgress(false, 0.0);
-            String msg = copyTask.getException() != null ? copyTask.getException().getMessage() : "error desconocido";
-            statusLabel.setText("Error al añadir fotos: " + msg);
+            String msg = copyTask.getException() != null ? copyTask.getException().getMessage() : "?";
+            statusLabel.setText(I18n.fmt("status.photosError", msg));
             logger.error("Error copiando fotos a la biblioteca", copyTask.getException());
         });
 
@@ -668,11 +804,11 @@ public class DrawingController {
             Label label;
             if (result.getScore() <= 0.0) {
                 label = new Label(String.format("#%d · %s", rank,
-                        result.getTitle() == null || result.getTitle().isBlank() ? "Referencia" : result.getTitle()));
+                        result.getTitle() == null || result.getTitle().isBlank() ? "Ref" : result.getTitle()));
                 label.setStyle("-fx-font-size: 11px; -fx-text-fill: #8880b0;");
             } else {
                 double pct = result.getScore() * 100;
-                label = new Label(String.format("%.0f%% similitud", pct));
+                label = new Label(I18n.fmt("gallery.similarity", Math.round(pct)));
                 label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 3 8 3 8;" +
                     "-fx-background-radius: 8; -fx-background-color: " +
                     (pct >= 60 ? "rgba(104,211,145,0.18); -fx-text-fill: #68d391;"
@@ -694,21 +830,20 @@ public class DrawingController {
         try {
             Path dir = ProjectPaths.getThumbnailsDirectory();
             long count = Files.list(dir).filter(Files::isRegularFile).count();
-            if (count == 0) return "No hay fotos en: " + dir + "  · Usa ➕ Añadir fotos para empezar.";
-            return "Hay " + count + " fotos pero no se pudo analizar la pose. "
-                    + "Asegúrate de tener Python con MediaPipe instalado.";
+            if (count == 0) return I18n.fmt("gallery.emptyLibrary", dir);
+            return I18n.fmt("gallery.emptyNoPose", count);
         } catch (Exception e) {
-            return "Sin resultados. Usa ➕ Añadir fotos o revisa el entorno Python.";
+            return I18n.t("gallery.noResults");
         }
     }
 
     private String buildTooltip(ImageResult result, int rank) {
-        StringBuilder sb = new StringBuilder("Posición: #").append(rank);
+        StringBuilder sb = new StringBuilder(I18n.fmt("tooltip.rank", rank));
         if (result.getTitle() != null && !result.getTitle().isBlank())
             sb.append("\n").append(result.getTitle());
         if (result.getScore() > 0.0)
-            sb.append("\n").append(String.format("Similitud: %.0f%%", result.getScore() * 100.0));
-        sb.append("\nHaz clic para abrir el archivo");
+            sb.append("\n").append(I18n.fmt("tooltip.similarity", Math.round(result.getScore() * 100.0)));
+        sb.append("\n").append(I18n.t("tooltip.open"));
         return sb.toString();
     }
 

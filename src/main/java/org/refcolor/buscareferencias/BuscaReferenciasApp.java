@@ -21,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 
@@ -49,6 +51,25 @@ public class BuscaReferenciasApp extends Application {
         }
 
         logger.info("[STARTUP] UI preparada en {} ms", Duration.between(t0, Instant.now()).toMillis());
+
+        // ── HiDPI: inyectar CSS escalado si la pantalla supera 1920×1080 ─────
+        {
+            Rectangle2D sb = Screen.getPrimary().getBounds();
+            double uiSc = Math.max(1.0, Math.min(2.5,
+                Math.min(sb.getWidth() / 1920.0, sb.getHeight() / 1080.0)));
+            if (uiSc > 1.05) {
+                try {
+                    Path tmpCss = Files.createTempFile("refcolor-dpi-", ".css");
+                    tmpCss.toFile().deleteOnExit();
+                    Files.writeString(tmpCss, buildScaledCss(uiSc));
+                    scene.getStylesheets().add(tmpCss.toUri().toString());
+                    logger.info("[STARTUP] HiDPI scale={} CSS aplicado desde {}",
+                            String.format("%.2f", uiSc), tmpCss.getFileName());
+                } catch (Exception ex) {
+                    logger.warn("[STARTUP] HiDPI CSS no aplicado: {}", ex.getMessage());
+                }
+            }
+        }
 
         // Inyectar HostServices (si el controller existe)
         try {
@@ -146,6 +167,64 @@ public class BuscaReferenciasApp extends Application {
         t.start();
     }
 
+
+    // ── HiDPI CSS helpers ─────────────────────────────────────────────────────
+
+    /**
+     * Generates a CSS override string that scales key UI measurements
+     * proportionally to the given scale factor (1.0 = 1920×1080 baseline).
+     */
+    private static String buildScaledCss(double s) {
+        int f   = r(13 * s); // base font
+        int fs  = r(10 * s); // small font (labels, section titles)
+        int fs2 = r(12 * s); // status label font
+        int fl  = r(11 * s); // progress label / batch-info font
+        int bH  = r(34 * s); // toolbar button min-height
+        int pH  = r(46 * s); // palette button min-height
+        int pV  = r(8  * s); // button vertical padding
+        int p1  = r(14 * s); // toolbar button h-padding
+        int p2  = r(20 * s); // search button h-padding
+        int p3  = r(16 * s); // add-photos h-padding
+        int p4  = r(10 * s); // help button h-padding
+        int p5  = r(6  * s); // help button v-padding
+        int qV  = r(9  * s); // palette v-padding
+        int qR  = r(12 * s); // palette right padding
+        int qL  = r(10 * s); // palette left padding
+        int pb  = r(11 * s); // batch progress bar height
+        int pt  = r(20 * s); // total progress bar height
+        int hf  = r(15 * s); // help-button emoji font
+
+        return ".root { -fx-font-size: " + f + "px; }\n"
+             + ".tool-bar { -fx-padding: " + pV + " " + p1 + " " + pV + " " + p1 + "; }\n"
+             + ".tool-bar .button, .tool-bar .toggle-button {\n"
+             + "    -fx-padding: " + pV + " " + p1 + " " + pV + " " + p1 + ";\n"
+             + "    -fx-font-size: " + f + "px; -fx-min-height: " + bH + ";\n"
+             + "}\n"
+             + ".search-button-large { -fx-font-size: " + f + "px;"
+             + " -fx-padding: " + pV + " " + p2 + " " + pV + " " + p2 + ";"
+             + " -fx-min-height: " + bH + "; }\n"
+             + ".add-photos-button { -fx-font-size: " + f + "px;"
+             + " -fx-padding: " + pV + " " + p3 + " " + pV + " " + p3 + ";"
+             + " -fx-min-height: " + bH + "; }\n"
+             + ".help-button { -fx-font-size: " + hf + "px;"
+             + " -fx-padding: " + p5 + " " + p4 + " " + p5 + " " + p4 + ";"
+             + " -fx-min-height: " + bH + "; }\n"
+             + ".section-title { -fx-font-size: " + fs + "px; }\n"
+             + ".palette-button { -fx-font-size: " + f + "px;"
+             + " -fx-min-height: " + pH + ";"
+             + " -fx-padding: " + qV + " " + qR + " " + qV + " " + qL + "; }\n"
+             + ".gallery-rank { -fx-font-size: " + fs + "px; }\n"
+             + ".status-prefix { -fx-font-size: " + fs + "px; }\n"
+             + "#statusLabel { -fx-font-size: " + fs2 + "px; }\n"
+             + ".progress-label { -fx-font-size: " + fl + "px; }\n"
+             + ".progress-pct-small { -fx-font-size: " + r(9 * s) + "px; }\n"
+             + ".progress-row-label { -fx-font-size: " + fs + "px; }\n"
+             + ".batch-info-label { -fx-font-size: " + fl + "px; }\n"
+             + ".progress-bar { -fx-min-height: " + pt + "; -fx-pref-height: " + pt + "; }\n"
+             + ".batch-progress-bar { -fx-min-height: " + pb + "; -fx-pref-height: " + pb + "; }\n";
+    }
+
+    private static int r(double v) { return (int) Math.round(v); }
 
     private void showFatalError(String title, Exception e) {
         Platform.runLater(() -> {

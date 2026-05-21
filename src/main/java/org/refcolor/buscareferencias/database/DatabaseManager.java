@@ -9,7 +9,9 @@ import java.sql.Statement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.List;
 import org.refcolor.buscareferencias.model.PoseData;
@@ -179,6 +181,15 @@ public class DatabaseManager {
             "landmarks TEXT," +
             "embedding TEXT," +
             "FOREIGN KEY(id_busqueda) REFERENCES Busquedas(id_busqueda)" +
+            ");",
+
+            // Caché persistente de poses por imagen: evita re-analizar con Python
+            "CREATE TABLE IF NOT EXISTS ImagePoseCache (" +
+            "file_path TEXT PRIMARY KEY," +
+            "landmarks TEXT NOT NULL," +
+            "embedding TEXT," +
+            "pose_angles TEXT," +
+            "analyzed_at DATETIME DEFAULT CURRENT_TIMESTAMP" +
             ");"
         };
 
@@ -202,6 +213,81 @@ public class DatabaseManager {
             schemaReady = false;
         } finally {
             logger.info("[DB] initDatabase() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
+        }
+    }
+
+    /**
+     * Carga todas las poses cacheadas de la tabla ImagePoseCache en un solo query.
+     * Devuelve un mapa [rutaAbsoluta → PoseData]; si la tabla no existe aún, devuelve mapa vacío.
+     */
+    public static Map<String, PoseData> loadAllCachedPoses() {
+        Map<String, PoseData> result = new HashMap<>();
+        ensureInitialized();
+        String sql = "SELECT file_path, landmarks, embedding, pose_angles FROM ImagePoseCache WHERE landmarks IS NOT NULL";
+        try (Connection conn = openConnection();
+             PreparedStatement pstmt = conn.prepareStatement(sql);
+             ResultSet rs = pstmt.executeQuery()) {
+            while (rs.next()) {
+                String path = rs.getString("file_path");
+                if (path == null || path.isBlank()) continue;
+                PoseData pose = new PoseData();
+                pose.setLandmarksFromJson(rs.getString("landmarks"));
+                String emb = rs.getString("embedding");
+                if (emb != null && !emb.isBlank()) pose.setEmbeddingFromJson(emb);
+                String angles = rs.getString("pose_angles");
+                if (angles != null && !angles.isBlank()) pose.setPoseAnglesFromJson(angles);
+                if (!pose.getAllLandmarks().isEmpty()) {
+                    result.put(path, pose);
+                }
+            }
+        } catch (SQLException e) {
+            String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+            if (msg.contains("no such table")) {
+                logger.debug("[DB] ImagePoseCache aún no creada; se inicializará en el próximo acceso.");
+            } else {
+                logger.warn("[DB] Error cargando ImagePoseCache: {}", e.getMessage());
+            }
+        }
+        logger.info("[DB] loadAllCachedPoses: {} poses cargadas.", result.size());
+        return result;
+    }
+
+    /**
+     * Guarda (o actualiza) un lote de poses en ImagePoseCache de forma transaccional.
+     * Llamar de forma asíncrona para no bloquear el hilo de búsqueda.
+     */
+    public static void cacheImagePoses(Map<String, PoseData> poses) {
+        if (poses == null || poses.isEmpty()) return;
+        ensureInitialized();
+        String sql = "INSERT OR REPLACE INTO ImagePoseCache (file_path, landmarks, embedding, pose_angles) VALUES (?, ?, ?, ?)";
+        try (Connection conn = openConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                int added = 0;
+                for (Map.Entry<String, PoseData> entry : poses.entrySet()) {
+                    String path = entry.getKey();
+                    PoseData pose = entry.getValue();
+                    if (pose == null || pose.getAllLandmarks().isEmpty()) continue;
+                    String lm = pose.getLandmarksJson();
+                    if (lm == null || lm.isBlank()) continue;
+                    pstmt.setString(1, path);
+                    pstmt.setString(2, lm);
+                    String emb = pose.getEmbeddingJson();
+                    pstmt.setString(3, (emb != null && !emb.isBlank()) ? emb : null);
+                    String angles = pose.getPoseAnglesJson();
+                    pstmt.setString(4, (angles != null && !angles.isBlank()) ? angles : null);
+                    pstmt.addBatch();
+                    added++;
+                }
+                pstmt.executeBatch();
+                conn.commit();
+                logger.debug("[DB] cacheImagePoses: {} poses guardadas.", added);
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) {
+            logger.warn("[DB] Error guardando ImagePoseCache: {}", e.getMessage());
         }
     }
 

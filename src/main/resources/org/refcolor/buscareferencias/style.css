@@ -388,3 +388,129 @@
 .touch-mode .toggle-button {
     -fx-min-height: 44;
 }
+
+/* ── Botón de ayuda / tutorial ───────────────────────────── */
+
+.help-button {
+    -fx-background-color: transparent;
+    -fx-text-fill: #6050a0;
+    -fx-font-size: 15px;
+    -fx-padding: 6 10 6 10;
+    -fx-background-radius: 7;
+    -fx-border-radius: 7;
+    -fx-border-color: transparent;
+    -fx-border-width: 1;
+    -fx-min-height: 34;
+}
+
+.help-button:hover {
+    -fx-background-color: rgba(167,139,250,0.12);
+    -fx-text-fill: #a78bfa;
+    -fx-border-color: rgba(167,139,250,0.30);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TUTORIAL OVERLAY
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Tarjeta del tutorial ────────────────────────────────── */
+
+.tutorial-card {
+    -fx-background-color:
+        linear-gradient(from 0% 0% to 100% 100%, #1e1540, #120c26);
+    -fx-background-radius: 22;
+    -fx-border-color:
+        rgba(167,139,250,0.70),
+        rgba(167,139,250,0.15);
+    -fx-border-width: 1.5, 6;
+    -fx-border-insets: 0, -4;
+    -fx-border-radius: 22, 26;
+    -fx-padding: 30 28 22 28;
+    -fx-spacing: 10;
+    -fx-alignment: CENTER;
+    -fx-effect:
+        dropshadow(gaussian, rgba(120,90,240,0.55), 50, 0.10, 0, 0),
+        dropshadow(gaussian, rgba(0,0,0,0.95), 45, 0, 0, 14);
+}
+
+.tutorial-icon {
+    -fx-font-size: 52px;
+    -fx-padding: 0 0 4 0;
+    -fx-alignment: CENTER;
+    -fx-text-alignment: CENTER;
+}
+
+.tutorial-title {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ede8ff;
+    -fx-wrap-text: true;
+    -fx-text-alignment: CENTER;
+    -fx-alignment: CENTER;
+}
+
+.tutorial-body {
+    -fx-font-size: 13px;
+    -fx-text-fill: #9b90c4;
+    -fx-wrap-text: true;
+    -fx-text-alignment: CENTER;
+    -fx-alignment: CENTER;
+    -fx-line-spacing: 3;
+    -fx-padding: 0 4 4 4;
+}
+
+/* ── Botones dentro del tutorial ─────────────────────────── */
+
+.tutorial-next-btn {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #a78bfa, #7c5ce8);
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-padding: 9 20 9 20;
+    -fx-background-radius: 9;
+    -fx-border-width: 0;
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.50), 12, 0.10, 0, 2);
+}
+
+.tutorial-next-btn:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #bea7ff, #a78bfa);
+    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.75), 16, 0.12, 0, 3);
+}
+
+.tutorial-next-btn:pressed {
+    -fx-background-color: #5a3eae;
+    -fx-effect: none;
+}
+
+.tutorial-back-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #9080c8;
+    -fx-font-size: 13px;
+    -fx-padding: 9 14 9 14;
+    -fx-background-radius: 9;
+    -fx-border-color: #4a3870;
+    -fx-border-width: 1;
+    -fx-border-radius: 9;
+}
+
+.tutorial-back-btn:hover {
+    -fx-background-color: rgba(167,139,250,0.10);
+    -fx-border-color: #7c5ce8;
+    -fx-text-fill: #c4b0ff;
+}
+
+.tutorial-back-btn:pressed {
+    -fx-background-color: rgba(167,139,250,0.18);
+}
+
+.tutorial-skip-btn {
+    -fx-background-color: transparent;
+    -fx-text-fill: #524878;
+    -fx-font-size: 12px;
+    -fx-padding: 9 12 9 12;
+    -fx-border-width: 0;
+}
+
+.tutorial-skip-btn:hover {
+    -fx-text-fill: #9080c0;
+}

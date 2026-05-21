@@ -8,8 +8,10 @@ module org.refcolor.buscareferencias {
     requires org.slf4j;
 
     requires org.json;
+    requires java.prefs;
 
     opens org.refcolor.buscareferencias to javafx.fxml;
+    opens org.refcolor.buscareferencias.tutorial to javafx.fxml;
     opens org.refcolor.buscareferencias.controller to javafx.fxml;
     exports org.refcolor.buscareferencias;
     exports org.refcolor.buscareferencias.model;

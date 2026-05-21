@@ -13,20 +13,27 @@
     <top>
         <ScrollPane fitToHeight="true" fitToWidth="true" hbarPolicy="AS_NEEDED" vbarPolicy="NEVER" styleClass="toolbar-scroll">
             <content>
-                <ToolBar>
-                    <Button text="🗑 Limpiar" onAction="#handleClear">
+                <ToolBar fx:id="toolBar">
+                    <Button fx:id="btnClear" text="🗑 Limpiar" onAction="#handleClear">
                         <tooltip><Tooltip text="Borrar todo el lienzo"/></tooltip>
                     </Button>
-                    <Button text="↩ Deshacer" onAction="#handleUndo"/>
-                    <Button text="↪ Rehacer" onAction="#handleRedo"/>
+                    <Button fx:id="btnUndo" text="↩ Deshacer" onAction="#handleUndo"/>
+                    <Button fx:id="btnRedo" text="↪ Rehacer" onAction="#handleRedo"/>
                     <Separator orientation="VERTICAL"/>
                     <ToggleButton fx:id="btnDraw" text="✎ Dibujar" selected="true" styleClass="tool-button"/>
                     <ToggleButton fx:id="btnErase" text="🧽 Borrar" styleClass="tool-button"/>
                     <Separator orientation="VERTICAL"/>
-                    <Button text="🔍 Buscar fotos" onAction="#handleLocalPhotoSearch" styleClass="search-button-large"/>
+                    <Button fx:id="btnSearch" text="🔍 Buscar fotos" onAction="#handleLocalPhotoSearch" styleClass="search-button-large"/>
                     <Separator orientation="VERTICAL"/>
-                    <Button text="➕ Añadir fotos" onAction="#handleAddPhotos" styleClass="add-photos-button">
+                    <Button fx:id="btnAddPhotos" text="➕ Añadir fotos" onAction="#handleAddPhotos" styleClass="add-photos-button">
                         <tooltip><Tooltip text="Añadir imágenes a la biblioteca de referencias"/></tooltip>
+                    </Button>
+                    <Separator orientation="VERTICAL"/>
+                    <Button fx:id="btnHelp" text="❓" onAction="#handleHelp" styleClass="help-button">
+                        <tooltip><Tooltip text="Ver el tutorial de nuevo"/></tooltip>
+                    </Button>
+                    <Button fx:id="btnLang" text="🌐 EN" onAction="#handleLang" styleClass="help-button">
+                        <tooltip><Tooltip text="Switch language / Cambiar idioma"/></tooltip>
                     </Button>
                 </ToolBar>
             </content>
@@ -40,7 +47,7 @@
                     <padding>
                         <Insets top="10" right="10" bottom="10" left="10"/>
                     </padding>
-                    <Label text="PALETA DE CUERPO" styleClass="section-title" />
+                    <Label fx:id="lblPalette" text="PALETA DE CUERPO" styleClass="section-title" />
                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
                         <VBox fx:id="paletteContainer" spacing="8" styleClass="palette-container">
                             <!-- Los botones de la paleta se generan dinámicamente -->
@@ -63,7 +70,7 @@
                     </StackPane>
 
                     <VBox spacing="6" styleClass="gallery-root">
-                        <Label text="GALERÍA DE REFERENCIAS" styleClass="section-title"/>
+                        <Label fx:id="lblGallery" text="GALERÍA DE REFERENCIAS" styleClass="section-title"/>
                         <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
                             <FlowPane fx:id="galleryPane" hgap="12" vgap="12" prefWrapLength="900" styleClass="gallery-pane">
                                 <!-- Las imágenes aparecen aquí -->
@@ -78,20 +85,20 @@
     <bottom>
         <VBox styleClass="status-bar">
             <HBox alignment="CENTER_LEFT" spacing="8" styleClass="status-row">
-                <Label text="Estado:" styleClass="status-prefix"/>
+                <Label fx:id="lblStatusPrefix" text="Estado:" styleClass="status-prefix"/>
                 <Label fx:id="statusLabel" text="Listo para dibujar" HBox.hgrow="ALWAYS"/>
                 <Label fx:id="batchNumLabel" text="" styleClass="batch-info-label"/>
             </HBox>
             <VBox fx:id="progressWrapper" visible="false" managed="false" spacing="5" styleClass="search-progress-panel">
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <Label text="Lote" styleClass="progress-row-label" minWidth="46"/>
+                    <Label fx:id="lblBatch" text="Lote" styleClass="progress-row-label" minWidth="46"/>
                     <StackPane HBox.hgrow="ALWAYS">
                         <ProgressBar fx:id="batchProgressBar" prefHeight="11" maxWidth="Infinity" progress="0" styleClass="batch-progress-bar"/>
                         <Label fx:id="batchPctLabel" text="" styleClass="progress-pct-small" mouseTransparent="true"/>
                     </StackPane>
                 </HBox>
                 <HBox spacing="10" alignment="CENTER_LEFT">
-                    <Label text="Total" styleClass="progress-row-label" minWidth="46"/>
+                    <Label fx:id="lblTotal" text="Total" styleClass="progress-row-label" minWidth="46"/>
                     <StackPane HBox.hgrow="ALWAYS">
                         <ProgressBar fx:id="progressBar" prefHeight="20" maxWidth="Infinity" progress="0"/>
                         <Label fx:id="progressLabel" text="" styleClass="progress-label" mouseTransparent="true"/>

@@ -53,6 +53,14 @@ public class MediaPipeService {
         try { SESSION_POSE_CACHE.clear(); } catch (Exception ignored) {}
     }
 
+    /**
+     * Vista de solo lectura de la caché en memoria de esta sesión.
+     * Usada por SearchService para el merge con la caché persistente de BD.
+     */
+    public static java.util.Map<String, PoseData> getSessionCache() {
+        return java.util.Collections.unmodifiableMap(SESSION_POSE_CACHE);
+    }
+
     private static final Logger logger = LoggerFactory.getLogger(MediaPipeService.class);
 
     /**
@@ -187,6 +195,19 @@ public class MediaPipeService {
             }
         }
         logger.info("[BATCH] {} poses detectadas de {} imágenes.", results.size(), imagePaths.size());
+
+        // Persistir de forma asíncrona para no bloquear el hilo de búsqueda
+        if (!results.isEmpty()) {
+            final java.util.Map<String, PoseData> toSave = new java.util.HashMap<>(results);
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    org.refcolor.buscareferencias.database.DatabaseManager.cacheImagePoses(toSave);
+                } catch (Exception ex) {
+                    logger.warn("[BATCH] Error guardando poses en BD: {}", ex.getMessage());
+                }
+            });
+        }
+
         return results;
     }
 

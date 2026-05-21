@@ -15,12 +15,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.refcolor.buscareferencias.database.DatabaseManager;
+import org.refcolor.buscareferencias.i18n.I18n;
 
 /**
  * Búsqueda local de fotos de referencia por similitud de pose (MediaPipe).
@@ -87,24 +91,44 @@ public class SearchService {
             );
         }
 
-        // --- Separar imágenes con pose cacheada de las que necesitan análisis ---
-        List<ImageResult> cachedHits = new ArrayList<>();
+        // ── Bulk-load ALL known poses (one DB query + session cache merge) ─────────
+        Map<String, PoseData> bulkCache;
+        try {
+            bulkCache = new HashMap<>(DatabaseManager.loadAllCachedPoses());
+        } catch (Exception ex) {
+            logger.warn("[SEARCH] Error cargando bulk cache: {}. Se usa caché de sesión.", ex.getMessage());
+            bulkCache = new HashMap<>();
+        }
+        bulkCache.putAll(MediaPipeService.getSessionCache());
+        logger.info("[SEARCH] Bulk cache: {} poses precargadas.", bulkCache.size());
+
+        // ── Clasificar: cacheadas (puntuación instantánea) vs necesitan Python ────
+        record CachedCandidate(ImageResult candidate, PoseData pose) {}
+        List<CachedCandidate> toScore = new ArrayList<>();
         List<ImageResult> needsAnalysis = new ArrayList<>();
         int total = discovered.size();
+        final Map<String, PoseData> bulkCacheFinal = bulkCache;
 
         for (ImageResult candidate : discovered) {
             String path = LocalImagePaths.toAbsolutePath(
                     firstNonBlank(candidate.getOriginalUrl(), candidate.getThumbnailUrl(), candidate.getSourcePageUrl())
             );
             if (path == null) continue;
-            PoseData cachedPose = MediaPipeService.peekCachedPose(path);
+            PoseData cachedPose = bulkCacheFinal.get(path);
             if (cachedPose != null && !cachedPose.getAllLandmarks().isEmpty()) {
-                double score = MediaPipeService.calculateSimilarity(drawingPose, cachedPose);
-                cachedHits.add(buildDisplayResult(candidate, score, cachedPose, String.join(" ", terms)));
+                toScore.add(new CachedCandidate(candidate, cachedPose));
             } else {
                 needsAnalysis.add(candidate);
             }
         }
+
+        // ── Puntuar cacheadas en paralelo (calculateSimilarity es pura / thread-safe) ─
+        final String queryStr = String.join(" ", terms);
+        List<ImageResult> cachedHits = toScore.parallelStream()
+                .map(cp -> buildDisplayResult(cp.candidate(),
+                        MediaPipeService.calculateSimilarity(drawingPose, cp.pose()),
+                        cp.pose(), queryStr))
+                .collect(Collectors.toList());
 
         // Report progress after instant cached scoring
         if (onProgress != null && total > 0) {
@@ -131,10 +155,7 @@ public class SearchService {
             int to   = Math.min(from + batchSize, totalUncached);
 
             if (round > 1 && onStatus != null && !hasHighSimilarityResult(allScored)) {
-                onStatus.accept(String.format(
-                        "Sin coincidencias ≥60%%. Buscando más... (%d/%d fotos analizadas)",
-                        analyzedSoFar + cachedCount, discovered.size()
-                ));
+                onStatus.accept(I18n.fmt("status.noMatch", analyzedSoFar + cachedCount, discovered.size()));
             }
 
             List<ImageResult> batch = needsAnalysis.subList(from, to);
@@ -182,7 +203,7 @@ public class SearchService {
             if (hasHighSimilarityResult(allScored)) {
                 logger.info("[SEARCH] Resultado ≥{}% encontrado en vuelta {}. Finalizando.",
                         (int) (HIGH_SIMILARITY_THRESHOLD * 100), round);
-                if (onStatus != null) onStatus.accept("¡Coincidencia encontrada! Mostrando mejores resultados.");
+                if (onStatus != null) onStatus.accept(I18n.t("status.matchFound"));
                 break;
             }
         }
