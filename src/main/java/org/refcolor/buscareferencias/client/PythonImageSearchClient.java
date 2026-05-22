@@ -329,7 +329,10 @@ public final class PythonImageSearchClient {
 		addExplicitPathCandidates(candidates, System.getenv("APP_PYTHON_PATH"), "APP_PYTHON_PATH");
 		addExplicitPathCandidates(candidates, System.getenv("PYTHON_PATH"), "PYTHON_PATH");
 		addExplicitPathCandidates(candidates, System.getProperty("python.path"), "python.path (system property)");
-		addExplicitPathCandidates(candidates, readConfigFilePythonPath().toString(), "config.properties/settings.json");
+		// Iterar la lista directamente — llamar .toString() producía "[/ruta]" con corchetes (B1)
+		for (String p : readConfigFilePythonPath()) {
+			addExplicitPathCandidates(candidates, p, "config.properties/settings.json");
+		}
 		addExplicitPathCandidates(candidates, FeatureFlags.getRaw("python.path"), "app.properties");
 
 		addVenvCandidates(candidates);
@@ -623,7 +626,8 @@ public final class PythonImageSearchClient {
 	}
 
 	private static void logEnvironmentSnapshot() {
-		logger.info("[PYTHON] PATH actual: {}", System.getenv("PATH"));
+		// PATH puede contener rutas sensibles; se loggea a nivel DEBUG para no exponerlo en producción (V1)
+		logger.debug("[PYTHON] PATH actual: {}", System.getenv("PATH"));
 		logger.info("[PYTHON] PYTHON_PATH: {}", maskPath(readEnvOrNull("PYTHON_PATH")));
 		logger.info("[PYTHON] APP_PYTHON_PATH: {}", maskPath(readEnvOrNull("APP_PYTHON_PATH")));
 		String sysProp = System.getProperty("python.path");
@@ -680,16 +684,12 @@ public final class PythonImageSearchClient {
 		return primary.isBlank() ? "<sin versión>" : primary.trim();
 	}
 
-	private static String firstNonBlank(String a, String b) {
-		if (isNonBlank(a)) return a;
-		if (isNonBlank(b)) return b;
-		return "";
-	}
-
-	private static String firstNonBlank(String a, String b, String c) {
-		if (isNonBlank(a)) return a;
-		if (isNonBlank(b)) return b;
-		if (isNonBlank(c)) return c;
+	private static String firstNonBlank(String... values) {
+		if (values != null) {
+			for (String v : values) {
+				if (isNonBlank(v)) return v;
+			}
+		}
 		return "";
 	}
 

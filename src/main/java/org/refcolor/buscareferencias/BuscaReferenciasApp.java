@@ -5,10 +5,6 @@ import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Alert;
-import javafx.scene.control.TextArea;
-import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
 import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
@@ -236,29 +232,4 @@ public class BuscaReferenciasApp extends Application {
 
     private static int r(double v) { return (int) Math.round(v); }
 
-    private void showFatalError(String title, Exception e) {
-        Platform.runLater(() -> {
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Error");
-            alert.setHeaderText(title);
-            alert.setContentText(e.getMessage());
-
-            StringBuilder sb = new StringBuilder();
-            for (StackTraceElement el : e.getStackTrace()) {
-                sb.append(el).append("\n");
-            }
-
-            TextArea textArea = new TextArea(sb.toString());
-            textArea.setEditable(false);
-            textArea.setWrapText(false);
-
-            VBox.setVgrow(textArea, Priority.ALWAYS);
-            VBox box = new VBox(textArea);
-            box.setMaxWidth(Double.MAX_VALUE);
-
-            alert.getDialogPane().setExpandableContent(box);
-            alert.getDialogPane().setExpanded(true);
-            alert.showAndWait();
-        });
-    }
 }

@@ -22,6 +22,11 @@ public class DatabaseManager {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
     private static final String URL = "jdbc:sqlite:buscareferencias.db";
     private static final int DEFAULT_USER_ID = 1;
+    // SQL extraído como constante para evitar duplicación (S1)
+    private static final String SQL_INSERT_RESULTADO =
+        "INSERT INTO Resultados (id_busqueda, url_imagen, thumbnailPath, url_origen, sourceUrl, provider, " +
+        "puntuacion_similitud, similarity, landmarks, embedding, embeddings, poseAngles) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static volatile boolean schemaReady = false;
 
     public static void ensureInitialized() {
@@ -44,7 +49,8 @@ public class DatabaseManager {
         try {
             Class.forName("org.sqlite.JDBC");
         } catch (ClassNotFoundException e) {
-            logger.error("SQLite JDBC Driver not found", e);
+            // Relanzar como SQLException para que el caller sepa que la conexión no es posible (B2)
+            throw new SQLException("SQLite JDBC Driver not found", e);
         }
         return DriverManager.getConnection(URL);
     }
@@ -52,7 +58,6 @@ public class DatabaseManager {
     public static int saveDrawing(PoseData pose, List<String> terms, List<org.refcolor.buscareferencias.model.ImageResult> results) {
         String sqlDibujo = "INSERT INTO Dibujos (id_usuario, datos_pose) VALUES (?, ?)";
         String sqlBusqueda = "INSERT INTO Busquedas (id_dibujo, terminos_busqueda) VALUES (?, ?)";
-        String sqlResultado = "INSERT INTO Resultados (id_busqueda, url_imagen, thumbnailPath, url_origen, sourceUrl, provider, puntuacion_similitud, similarity, landmarks, embedding, embeddings, poseAngles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         int idBusqueda = -1;
         try (Connection conn = getConnection()) {
@@ -62,27 +67,30 @@ public class DatabaseManager {
                 pstmtDibujo.setString(2, pose.toString());
                 pstmtDibujo.executeUpdate();
 
-                ResultSet rs = pstmtDibujo.getGeneratedKeys();
-                if (rs.next()) {
-                    int idDibujo = rs.getInt(1);
-                    try (PreparedStatement pstmtBusqueda = conn.prepareStatement(sqlBusqueda, Statement.RETURN_GENERATED_KEYS)) {
-                        pstmtBusqueda.setInt(1, idDibujo);
-                        pstmtBusqueda.setString(2, String.join(", ", terms));
-                        pstmtBusqueda.executeUpdate();
-                        
-                        ResultSet rsBusq = pstmtBusqueda.getGeneratedKeys();
-                        if (rsBusq.next()) {
-                            idBusqueda = rsBusq.getInt(1);
-                        }
-                    }
-                    
-                    if (idBusqueda != -1 && results != null) {
-                        try (PreparedStatement pstmtRes = conn.prepareStatement(sqlResultado)) {
-                            for (var res : results) {
-                                bindResultRow(pstmtRes, idBusqueda, res);
-                                pstmtRes.addBatch();
+                // try-with-resources para cerrar el ResultSet y evitar resource leak (B3)
+                try (ResultSet rs = pstmtDibujo.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        int idDibujo = rs.getInt(1);
+                        try (PreparedStatement pstmtBusqueda = conn.prepareStatement(sqlBusqueda, Statement.RETURN_GENERATED_KEYS)) {
+                            pstmtBusqueda.setInt(1, idDibujo);
+                            pstmtBusqueda.setString(2, String.join(", ", terms));
+                            pstmtBusqueda.executeUpdate();
+
+                            try (ResultSet rsBusq = pstmtBusqueda.getGeneratedKeys()) {
+                                if (rsBusq.next()) {
+                                    idBusqueda = rsBusq.getInt(1);
+                                }
                             }
-                            pstmtRes.executeBatch();
+                        }
+
+                        if (idBusqueda != -1 && results != null) {
+                            try (PreparedStatement pstmtRes = conn.prepareStatement(SQL_INSERT_RESULTADO)) {
+                                for (var res : results) {
+                                    bindResultRow(pstmtRes, idBusqueda, res);
+                                    pstmtRes.addBatch();
+                                }
+                                pstmtRes.executeBatch();
+                            }
                         }
                     }
                 }
@@ -100,9 +108,8 @@ public class DatabaseManager {
 
     public static void saveResults(int idBusqueda, List<org.refcolor.buscareferencias.model.ImageResult> results) {
         if (idBusqueda == -1 || results == null || results.isEmpty()) return;
-        String sqlResultado = "INSERT INTO Resultados (id_busqueda, url_imagen, thumbnailPath, url_origen, sourceUrl, provider, puntuacion_similitud, similarity, landmarks, embedding, embeddings, poseAngles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection conn = getConnection()) {
-            try (PreparedStatement pstmtRes = conn.prepareStatement(sqlResultado)) {
+            try (PreparedStatement pstmtRes = conn.prepareStatement(SQL_INSERT_RESULTADO)) {
                 for (var res : results) {
                     bindResultRow(pstmtRes, idBusqueda, res);
                     pstmtRes.addBatch();
@@ -356,8 +363,12 @@ public class DatabaseManager {
 
     private static Set<String> getColumns(Connection conn, String tableName) throws SQLException {
         Set<String> columns = new LinkedHashSet<>();
-        try (PreparedStatement pstmt = conn.prepareStatement("PRAGMA table_info(" + tableName + ")");
-             ResultSet rs = pstmt.executeQuery()) {
+        // Validar tableName contra lista blanca para evitar SQL injection (V2)
+        if (!tableName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new SQLException("Nombre de tabla inválido: " + tableName);
+        }
+        try (Statement s = conn.createStatement();
+             ResultSet rs = s.executeQuery("PRAGMA table_info(" + tableName + ")")) {
             while (rs.next()) {
                 columns.add(rs.getString("name"));
             }
@@ -368,6 +379,13 @@ public class DatabaseManager {
     private static void ensureColumn(Statement stmt, Set<String> columns, String columnName, String ddlType) throws SQLException {
         if (columns.contains(columnName)) {
             return;
+        }
+        // Validar nombre de columna y tipo contra lista blanca (V2)
+        if (!columnName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new SQLException("Nombre de columna inválido: " + columnName);
+        }
+        if (!ddlType.matches("TEXT|REAL|INTEGER|BLOB|NUMERIC")) {
+            throw new SQLException("Tipo DDL inválido: " + ddlType);
         }
         stmt.execute("ALTER TABLE Resultados ADD COLUMN " + columnName + " " + ddlType);
         columns.add(columnName);

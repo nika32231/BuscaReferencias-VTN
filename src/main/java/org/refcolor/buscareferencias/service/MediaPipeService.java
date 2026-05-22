@@ -32,12 +32,16 @@ public class MediaPipeService {
      */
     public static class ImageCacheService {
 
+        /**
+         * Limpia/reinicia la caché de sesión. startSessionCache y clearSessionCache
+         * eran idénticos — unificados en un solo método (S2).
+         */
         public static synchronized void startSessionCache() {
-            try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
+            SESSION_POSE_CACHE.clear();
         }
 
         public static synchronized void clearSessionCache() {
-            try { MediaPipeService.clearSessionPoseCache(); } catch (Exception ignored) {}
+            SESSION_POSE_CACHE.clear();
         }
 
         public static String resolveLocalPath(String imageSource) {
@@ -50,7 +54,7 @@ public class MediaPipeService {
      * Limpia la caché de poses en memoria (llamar al iniciar una nueva búsqueda)
      */
     public static void clearSessionPoseCache() {
-        try { SESSION_POSE_CACHE.clear(); } catch (Exception ignored) {}
+        SESSION_POSE_CACHE.clear();  // ConcurrentHashMap.clear() nunca lanza excepciones checked (S3)
     }
 
     /**
@@ -771,9 +775,11 @@ public class MediaPipeService {
         double normA = 0.0;
         double normB = 0.0;
         for (int i = 0; i < vec1.size(); i++) {
-            dotProduct += vec1.get(i) * vec2.get(i);
-            normA += Math.pow(vec1.get(i), 2);
-            normB += Math.pow(vec2.get(i), 2);
+            double a = vec1.get(i);
+            double b = vec2.get(i);
+            dotProduct += a * b;
+            normA += a * a;  // x*x evita boxing y es más rápido que Math.pow(x,2) (P2)
+            normB += b * b;
         }
         if (normA <= 0 || normB <= 0) return 0.0;
         double similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));

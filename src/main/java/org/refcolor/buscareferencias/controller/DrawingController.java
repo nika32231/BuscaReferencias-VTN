@@ -430,19 +430,17 @@ public class DrawingController {
             colorBtn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
 
             // Estilo inicial
-            colorBtn.setStyle(buildPillStyle(part, false));
+            colorBtn.setStyle(buildPillStyle(part, 0));
 
-            // Hover: escala sutil que no interfiere con el fondo inline
+            // Hover: cambia estilo inline igual que la barra de herramientas
             colorBtn.hoverProperty().addListener((obs, was, now) -> {
                 if (!colorBtn.isSelected()) {
-                    double scale = now ? 1.025 : 1.0;
-                    colorBtn.setScaleX(scale);
-                    colorBtn.setScaleY(scale);
+                    colorBtn.setStyle(buildPillStyle(part, now ? 1 : 0));
                 }
             });
 
             colorBtn.selectedProperty().addListener((obs, was, now) -> {
-                colorBtn.setStyle(buildPillStyle(part, now));
+                colorBtn.setStyle(buildPillStyle(part, now ? 2 : 0));
                 colorBtn.setScaleX(1.0);
                 colorBtn.setScaleY(1.0);
                 if (now) {
@@ -467,55 +465,68 @@ public class DrawingController {
     }
 
     /**
-     * Genera el inline style para un botón-pastilla de paleta.
+     * Genera el inline style para un botón-pastilla de paleta,
+     * con la misma estética que los botones de la barra de herramientas
+     * pero usando el color de cada parte anatómica.
      *
-     * Estado normal  → pastilla 3D levantada: gradiente claro→oscuro,
-     *                  brillo en la parte superior (shine), borde inferior
-     *                  más oscuro a modo de rim para dar profundidad.
-     * Estado selected → pastilla hundida: gradiente invertido (oscuro→base),
-     *                  inner-shadow de pulsación, glow de color externo.
+     * state 0 = normal   → gradiente oscuro del color, como toolbar button
+     * state 1 = hover    → gradiente ligeramente más claro
+     * state 2 = selected → gradiente brillante con glow, como toolbar:selected
      */
-    private static String buildPillStyle(AnatomyPart part, boolean selected) {
-        Color base     = Color.web(part.getHexColor());
-        String lightHex = toHex(base.interpolate(Color.WHITE, 0.32));
-        String darkHex  = toHex(base.interpolate(Color.BLACK, 0.35));
-        String rimHex   = toHex(base.interpolate(Color.BLACK, 0.52));
+    private static String buildPillStyle(AnatomyPart part, int state) {
+        Color base = Color.web(part.getHexColor());
 
-        // Contraste de texto: oscuro para colores claros (amarillo), blanco para el resto
-        double lum = 0.299 * base.getRed() + 0.587 * base.getGreen() + 0.114 * base.getBlue();
-        String textFill  = lum > 0.58 ? "rgba(18,28,40,0.92)" : "rgba(255,255,255,0.96)";
-        String textFillSel = "rgba(255,255,255,0.97)";
+        // Variantes oscurecidas para estado normal/hover
+        String dark1  = toHex(base.interpolate(Color.BLACK, 0.38));
+        String dark2  = toHex(base.interpolate(Color.BLACK, 0.52));
+        String hover1 = toHex(base.interpolate(Color.BLACK, 0.24));
+        String hover2 = toHex(base.interpolate(Color.BLACK, 0.38));
 
+        // Variante clara para selected (top del gradiente)
+        String sel1   = toHex(base.interpolate(Color.WHITE, 0.18));
+
+        // Borde como rgba
+        Color bdrC  = base.interpolate(Color.BLACK, 0.60);
+        String bdr  = "rgba(" + (int)(bdrC.getRed()*255)  + "," +
+                                (int)(bdrC.getGreen()*255) + "," +
+                                (int)(bdrC.getBlue()*255)  + ",0.80)";
+        Color bdrHC = base.interpolate(Color.BLACK, 0.45);
+        String bdrH = "rgba(" + (int)(bdrHC.getRed()*255)  + "," +
+                                (int)(bdrHC.getGreen()*255) + "," +
+                                (int)(bdrHC.getBlue()*255)  + ",0.80)";
+
+        // Glow para selected
         int r = (int)(base.getRed()   * 255);
         int g = (int)(base.getGreen() * 255);
         int b = (int)(base.getBlue()  * 255);
 
-        if (!selected) {
-            // Capa 1 (fondo): rim oscuro a tamaño completo
-            // Capa 2 (encima): gradiente principal con 4px inset inferior → queda el rim visible
-            // Capa 3 (encima): brillo blanco semitransparente solo en la mitad superior
-            return
-                "-fx-background-color: " + rimHex + "," +
-                    "linear-gradient(from 0% 0% to 0% 100%," + lightHex + "," + part.getHexColor() + " 55%," + darkHex + ")," +
-                    "linear-gradient(from 0% 0% to 0% 38%, rgba(255,255,255,0.22), transparent);" +
-                "-fx-background-insets: 0, 0 0 4 0, 0 0 4 0;" +
-                "-fx-background-radius: 12, 12, 12;" +
-                "-fx-text-fill: " + textFill + ";" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 7, 0, 0, 3);";
-        } else {
-            // Hundido: gradiente oscuro→base (sin brillo), inner-shadow, glow exterior
-            return
-                "-fx-background-color: " +
-                    "linear-gradient(from 0% 0% to 0% 100%," + darkHex + "," + part.getHexColor() + " 75%);" +
-                "-fx-background-insets: 0;" +
-                "-fx-background-radius: 12;" +
-                "-fx-border-color: rgba(255,255,255,0.42);" +
+        return switch (state) {
+            case 1 -> // hover
+                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + hover1 + ", " + hover2 + ");" +
+                "-fx-background-radius: 10;" +
+                "-fx-border-color: " + bdrH + ";" +
+                "-fx-border-width: 1;" +
+                "-fx-border-radius: 10;" +
+                "-fx-text-fill: rgba(255,255,255,0.92);" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
+            case 2 -> // selected
+                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + sel1 + ", " + part.getHexColor() + ");" +
+                "-fx-background-radius: 10;" +
+                "-fx-border-color: rgba(255,255,255,0.55);" +
                 "-fx-border-width: 1.5;" +
-                "-fx-border-radius: 12;" +
-                "-fx-text-fill: " + textFillSel + ";" +
-                "-fx-effect: innershadow(gaussian, rgba(0,0,0,0.52), 6, 0, 0, 2)," +
-                    "dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.80), 22, 0.22, 0, 0);";
-        }
+                "-fx-border-radius: 10;" +
+                "-fx-text-fill: rgba(255,255,255,0.97);" +
+                "-fx-effect: dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.80), 22, 0.10, 0, 0)," +
+                    "innershadow(gaussian, rgba(255,255,255,0.18), 4, 0, 0, 1);";
+            default -> // normal (0)
+                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + dark1 + ", " + dark2 + ");" +
+                "-fx-background-radius: 10;" +
+                "-fx-border-color: " + bdr + ";" +
+                "-fx-border-width: 1;" +
+                "-fx-border-radius: 10;" +
+                "-fx-text-fill: rgba(189,199,201,0.92);" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
+        };
     }
 
     /** Convierte un Color de JavaFX a cadena hexadecimal #RRGGBB. */

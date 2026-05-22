@@ -105,8 +105,13 @@ public class PoseData {
     public void setPoseAnglesFromJson(String jsonStr) {
         poseAngles.clear();
         if (jsonStr == null || jsonStr.isBlank()) return;
-        org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-        json.keySet().forEach(key -> poseAngles.put(key, json.getDouble(key)));
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(jsonStr);
+            // getDouble puede lanzar JSONException si el valor no es numérico (B4)
+            json.keySet().forEach(key -> {
+                try { poseAngles.put(key, json.getDouble(key)); } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
     }
 
     public String getLandmarksJson() {
@@ -128,16 +133,22 @@ public class PoseData {
 
     public void setLandmarksFromJson(String jsonStr) {
         if (jsonStr == null || jsonStr.isEmpty()) return;
-        org.json.JSONObject json = new org.json.JSONObject(jsonStr);
-        json.keySet().forEach(key -> {
-            org.json.JSONObject p = json.getJSONObject(key);
-            double vis = p.optDouble("v", -1.0);
-            if (vis >= 0) {
-                addLandmark(Integer.parseInt(key), p.getDouble("x"), p.getDouble("y"), vis);
-            } else {
-                addLandmark(Integer.parseInt(key), p.getDouble("x"), p.getDouble("y"));
-            }
-        });
+        try {
+            org.json.JSONObject json = new org.json.JSONObject(jsonStr);
+            json.keySet().forEach(key -> {
+                try {
+                    // Integer.parseInt puede lanzar NumberFormatException con BD corrupta (B5)
+                    int id = Integer.parseInt(key);
+                    org.json.JSONObject p = json.getJSONObject(key);
+                    double vis = p.optDouble("v", -1.0);
+                    if (vis >= 0) {
+                        addLandmark(id, p.getDouble("x"), p.getDouble("y"), vis);
+                    } else {
+                        addLandmark(id, p.getDouble("x"), p.getDouble("y"));
+                    }
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
     }
 
     public void setEmbeddingFromJson(String jsonStr) {

@@ -45,12 +45,21 @@ public class DrawingProcessor {
 
     // Solo los ítems de paleta se usan para la detección por color
     private static final AnatomyPart[] PALETTE_PARTS;
+    // Colores precomputados de la paleta para evitar Color.web() O(W×H×8) en el bucle píxel (P1)
+    private static final Color[] PALETTE_COLORS;
     static {
         int count = 0;
         for (AnatomyPart p : AnatomyPart.values()) if (p.isPaletteItem()) count++;
-        PALETTE_PARTS = new AnatomyPart[count];
+        PALETTE_PARTS  = new AnatomyPart[count];
+        PALETTE_COLORS = new Color[count];
         int i = 0;
-        for (AnatomyPart p : AnatomyPart.values()) if (p.isPaletteItem()) PALETTE_PARTS[i++] = p;
+        for (AnatomyPart p : AnatomyPart.values()) {
+            if (p.isPaletteItem()) {
+                PALETTE_PARTS[i]  = p;
+                PALETTE_COLORS[i] = Color.web(p.getHexColor());
+                i++;
+            }
+        }
     }
 
     public static PoseData processImage(WritableImage snapshot) {
@@ -77,14 +86,15 @@ public class DrawingProcessor {
             rSumX.put(part, 0.0); rSumY.put(part, 0.0); rCnt.put(part, 0);
         }
 
-        // ── Pasada única O(W×H) ────────────────────────────────────────────────
+        // ── Pasada única O(W×H) — usa PALETTE_COLORS precomputado, no Color.web() en el bucle (P1) ──
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 Color pixel = reader.getColor(x, y);
                 if (pixel.getOpacity() < 0.5) continue;
 
-                for (AnatomyPart part : PALETTE_PARTS) {
-                    if (!isSimilarHSB(pixel, Color.web(part.getHexColor()))) continue;
+                for (int pi = 0; pi < PALETTE_PARTS.length; pi++) {
+                    AnatomyPart part = PALETTE_PARTS[pi];
+                    if (!isSimilarHSB(pixel, PALETTE_COLORS[pi])) continue;
 
                     double nx = (double) x / width;
                     double ny = (double) y / height;

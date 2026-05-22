@@ -289,18 +289,18 @@
 .palette-pill-button {
     -fx-font-size: 13px;
     -fx-font-weight: bold;
-    -fx-min-height: 42;
-    -fx-pref-height: 42;
-    -fx-background-radius: 12;
-    -fx-border-radius: 12;
+    -fx-min-height: 38;
+    -fx-pref-height: 38;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
     -fx-cursor: hand;
     -fx-alignment: center;
-    -fx-padding: 0 16 0 16;
+    -fx-padding: 8 15 8 15;
 }
 
 /* Bajada mínima al pulsar para reforzar sensación táctil */
 .palette-pill-button:pressed {
-    -fx-translate-y: 2;
+    -fx-translate-y: 1;
 }
 
 /* ── ScrollPane genérico ─────────────────────────────────── */
