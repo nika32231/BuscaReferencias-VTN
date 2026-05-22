@@ -15,64 +15,71 @@
 
 .toolbar-scroll,
 .toolbar-scroll > .viewport {
-    -fx-background-color: #1a1726;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #1e1838, #161228);
     -fx-background-insets: 0;
 }
 
 .tool-bar {
-    -fx-spacing: 6;
-    -fx-padding: 8 14 8 14;
-    -fx-background-color: #1a1726;
-    -fx-border-color: transparent transparent #28234a transparent;
-    -fx-border-width: 0 0 1 0;
+    -fx-spacing: 8;
+    -fx-padding: 9 16 9 16;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent transparent #42367a transparent;
+    -fx-border-width: 0 0 2 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 10, 0, 0, 5);
 }
 
 .tool-bar .button,
 .tool-bar .toggle-button {
-    -fx-padding: 8 14 8 14;
-    -fx-font-size: 13px;
+    -fx-padding: 8 16 8 16;
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
-    -fx-background-radius: 7;
-    -fx-border-radius: 7;
-    -fx-text-fill: #bab5d8;
-    -fx-background-color: #26223a;
-    -fx-border-color: #332e4f;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-text-fill: #ccc6e8;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #2e2848, #231e38);
+    -fx-border-color: #3e3860;
     -fx-border-width: 1;
-    -fx-min-height: 34;
+    -fx-min-height: 40;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);
 }
 
 .tool-bar .button:hover,
 .tool-bar .toggle-button:hover {
-    -fx-background-color: #322c50;
-    -fx-text-fill: #e8e2ff;
-    -fx-border-color: #4a4270;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3e3460, #2e2850);
+    -fx-text-fill: #f0ecff;
+    -fx-border-color: #5a4e90;
+    -fx-effect: dropshadow(gaussian, rgba(100,80,200,0.35), 8, 0, 0, 1);
 }
 
 .tool-bar .toggle-button:selected {
-    -fx-background-color: #3d3464;
-    -fx-text-fill: #d8d0ff;
-    -fx-border-color: #a78bfa;
-    -fx-border-width: 1;
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.25), 8, 0, 0, 0);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #7048d0, #5030a8);
+    -fx-text-fill: #ffffff;
+    -fx-border-color: #d0aeff;
+    -fx-border-width: 2;
+    -fx-effect:
+        dropshadow(gaussian, rgba(130,80,255,0.75), 24, 0.08, 0, 0),
+        innershadow(gaussian, rgba(220,190,255,0.28), 5, 0, 0, 1);
 }
 
 .tool-bar .separator .line {
-    -fx-border-color: #28234a;
+    -fx-border-color: #352e60;
     -fx-border-width: 0 1 0 0;
 }
 
 /* ── Botón principal: Buscar ─────────────────────────────── */
 
 .search-button-large {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #34a860, #217a45);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3ebc70, #229a48);
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
-    -fx-font-size: 13px;
-    -fx-padding: 8 20 8 20;
-    -fx-background-radius: 7;
+    -fx-font-size: 14px;
+    -fx-padding: 8 22 8 22;
+    -fx-background-radius: 9;
     -fx-border-width: 0;
-    -fx-min-height: 34;
-    -fx-effect: dropshadow(gaussian, rgba(52,168,96,0.45), 10, 0.1, 0, 2);
+    -fx-min-height: 40;
+    -fx-effect:
+        dropshadow(gaussian, rgba(52,200,100,0.60), 16, 0.12, 0, 2),
+        dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .search-button-large:hover {
@@ -88,15 +95,17 @@
 /* ── Botón Añadir fotos ──────────────────────────────────── */
 
 .add-photos-button {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #a78bfa, #7c5ce8);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #b898ff, #8060e8);
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
-    -fx-font-size: 13px;
-    -fx-padding: 8 16 8 16;
-    -fx-background-radius: 7;
+    -fx-font-size: 14px;
+    -fx-padding: 8 18 8 18;
+    -fx-background-radius: 9;
     -fx-border-width: 0;
-    -fx-min-height: 34;
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.45), 10, 0.1, 0, 2);
+    -fx-min-height: 40;
+    -fx-effect:
+        dropshadow(gaussian, rgba(180,140,255,0.60), 16, 0.12, 0, 2),
+        dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .add-photos-button:hover {
@@ -113,7 +122,7 @@
 
 .canvas-root {
     -fx-background-color: radial-gradient(center 50% 50%, radius 80%, #131028, #0a0812);
-    -fx-padding: 28;
+    -fx-padding: 10;
 }
 
 .canvas-container {
@@ -132,49 +141,49 @@
 /* ── Paleta lateral ──────────────────────────────────────── */
 
 .side-palette {
-    -fx-background-color: #171526;
-    -fx-border-color: transparent #28234a transparent transparent;
-    -fx-border-width: 0 1 0 0;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #191632, #13112a);
+    -fx-border-color: transparent #3a3270 transparent transparent;
+    -fx-border-width: 0 2 0 0;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 12, 0, 6, 0);
 }
 
 .section-title {
-    -fx-font-size: 10px;
+    -fx-font-size: 11px;
     -fx-font-weight: bold;
-    -fx-text-fill: #7060a8;
-    -fx-padding: 0 0 4 0;
+    -fx-text-fill: #8878c8;
+    -fx-padding: 4 0 10 2;
+    -fx-border-color: transparent transparent #2e2858 transparent;
+    -fx-border-width: 0 0 1 0;
 }
 
 .palette-container {
-    -fx-padding: 0 2 4 2;
+    -fx-padding: 4 3 6 3;
 }
 
 .palette-button {
     -fx-background-color: transparent;
-    -fx-text-fill: #aca8cc;
-    -fx-font-size: 13px;
+    -fx-text-fill: #cdc8e8;
+    -fx-font-size: 14px;
     -fx-font-weight: bold;
-    -fx-background-radius: 7;
-    -fx-border-radius: 7;
+    -fx-background-radius: 8;
+    -fx-border-radius: 8;
     -fx-border-color: transparent;
     -fx-border-width: 1;
-    -fx-pref-width: 180;
+    -fx-pref-width: 200;
     -fx-min-height: 46;
     -fx-alignment: CENTER_LEFT;
-    -fx-padding: 9 12 9 10;
+    -fx-padding: 3 8 3 5;
 }
 
 .palette-button:hover {
-    -fx-background-color: #1f1c30;
-    -fx-text-fill: #d8d4f8;
-    -fx-border-color: #322c50;
+    -fx-background-color: rgba(55,44,98,0.65);
+    -fx-text-fill: #e8e4f8;
+    -fx-border-color: #3a3270;
 }
 
-/* Seleccionado: CSS provee fondo genérico;
-   el borde de color específico lo pone el código Java */
+/* Seleccionado: fondo y borde de color los aplica Java por parte anatómica */
 .palette-button:selected {
-    -fx-background-color: #221e38;
     -fx-text-fill: #ffffff;
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.20), 6, 0, 0, 0);
 }
 
 /* ── ScrollPane genérico ─────────────────────────────────── */
@@ -191,17 +200,17 @@
 /* ── Galería ─────────────────────────────────────────────── */
 
 .gallery-root {
-    -fx-padding: 10 12 12 12;
+    -fx-padding: 4 8 6 8;
     -fx-background-color: #13111d;
 }
 
 .gallery-pane {
-    -fx-padding: 6;
+    -fx-padding: 4;
     -fx-background-color: transparent;
 }
 
 .image-card {
-    -fx-padding: 8;
+    -fx-padding: 6;
     -fx-border-color: #2a2448;
     -fx-border-width: 1;
     -fx-border-radius: 12;
@@ -356,13 +365,14 @@
 
 .compact-mode .tool-bar .button,
 .compact-mode .tool-bar .toggle-button {
-    -fx-font-size: 12px;
-    -fx-padding: 7 10 7 10;
+    -fx-font-size: 13px;
+    -fx-padding: 6 10 6 10;
+    -fx-min-height: 34;
 }
 
 .compact-mode .palette-button {
-    -fx-pref-width: 154;
-    -fx-min-height: 42;
+    -fx-pref-width: 162;
+    -fx-min-height: 40;
     -fx-font-size: 12px;
 }
 
@@ -375,38 +385,48 @@
 }
 
 .phone-mode .canvas-root {
-    -fx-padding: 10;
+    -fx-padding: 8;
 }
 
 .phone-mode .palette-button {
-    -fx-pref-width: 118;
-    -fx-min-height: 38;
+    -fx-pref-width: 124;
+    -fx-min-height: 36;
     -fx-font-size: 11px;
 }
 
 .touch-mode .button,
 .touch-mode .toggle-button {
-    -fx-min-height: 44;
+    -fx-min-height: 48;
+}
+
+.large-mode .palette-button {
+    -fx-pref-width: 216;
+    -fx-min-height: 48;
+}
+
+.large-mode .canvas-root {
+    -fx-padding: 12;
 }
 
 /* ── Botón de ayuda / tutorial ───────────────────────────── */
 
 .help-button {
-    -fx-background-color: transparent;
-    -fx-text-fill: #6050a0;
-    -fx-font-size: 15px;
-    -fx-padding: 6 10 6 10;
-    -fx-background-radius: 7;
-    -fx-border-radius: 7;
-    -fx-border-color: transparent;
+    -fx-background-color: rgba(80,60,140,0.25);
+    -fx-text-fill: #9080c8;
+    -fx-font-size: 16px;
+    -fx-padding: 6 11 6 11;
+    -fx-background-radius: 9;
+    -fx-border-radius: 9;
+    -fx-border-color: #3e3870;
     -fx-border-width: 1;
-    -fx-min-height: 34;
+    -fx-min-height: 40;
 }
 
 .help-button:hover {
-    -fx-background-color: rgba(167,139,250,0.12);
-    -fx-text-fill: #a78bfa;
-    -fx-border-color: rgba(167,139,250,0.30);
+    -fx-background-color: rgba(140,100,255,0.25);
+    -fx-text-fill: #c8a8ff;
+    -fx-border-color: rgba(167,139,250,0.55);
+    -fx-effect: dropshadow(gaussian, rgba(140,100,255,0.40), 10, 0, 0, 0);
 }
 
 /* ═══════════════════════════════════════════════════════════

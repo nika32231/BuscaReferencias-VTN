@@ -304,12 +304,17 @@ public class TutorialOverlay {
      * top-left because the Scale pivot is at the card's (0, 0).
      */
     private void positionCard(Node target) {
+        // Responsive card width: never wider than 88% of available space (unscaled)
+        double rw     = canvas.getWidth();
+        double rh     = canvas.getHeight();
+        double maxTw  = rw > 0 ? Math.min(TOOLTIP_W, rw / Math.max(1.0, uiScale) * 0.88) : TOOLTIP_W;
+        double tw     = Math.max(200, maxTw);               // layout width (unscaled)
+        card.setPrefWidth(tw);
+        card.setMaxWidth(tw);
+
         card.applyCss();
         card.layout();
 
-        double rw     = canvas.getWidth();
-        double rh     = canvas.getHeight();
-        double tw     = TOOLTIP_W;                          // layout width (unscaled)
         double th     = Math.max(160, card.prefHeight(tw)); // layout height (unscaled)
         double tw_vis = tw * uiScale;                       // visual width
         double th_vis = th * uiScale;                       // visual height
@@ -420,7 +425,7 @@ public class TutorialOverlay {
         card.getChildren().addAll(iconLabel, title, body, dotsRow, btnRow);
         card.setPrefWidth(TOOLTIP_W);
         card.setMaxWidth(TOOLTIP_W);
-        card.setMinWidth(TOOLTIP_W);
+        card.setMinWidth(200);
 
         // Scale card for HiDPI screens (pivot at top-left so layoutX/Y stay as visual origin)
         if (uiScale > 1.01) {

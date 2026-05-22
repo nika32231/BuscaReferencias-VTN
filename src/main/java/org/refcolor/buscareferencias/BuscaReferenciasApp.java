@@ -179,20 +179,20 @@ public class BuscaReferenciasApp extends Application {
         int fs  = r(10 * s); // small font (labels, section titles)
         int fs2 = r(12 * s); // status label font
         int fl  = r(11 * s); // progress label / batch-info font
-        int bH  = r(34 * s); // toolbar button min-height
+        int bH  = r(40 * s); // toolbar button min-height
         int pH  = r(46 * s); // palette button min-height
         int pV  = r(8  * s); // button vertical padding
-        int p1  = r(14 * s); // toolbar button h-padding
-        int p2  = r(20 * s); // search button h-padding
-        int p3  = r(16 * s); // add-photos h-padding
-        int p4  = r(10 * s); // help button h-padding
+        int p1  = r(16 * s); // toolbar button h-padding
+        int p2  = r(22 * s); // search button h-padding
+        int p3  = r(18 * s); // add-photos h-padding
+        int p4  = r(11 * s); // help button h-padding
         int p5  = r(6  * s); // help button v-padding
-        int qV  = r(9  * s); // palette v-padding
-        int qR  = r(12 * s); // palette right padding
-        int qL  = r(10 * s); // palette left padding
+        int qV  = r(3  * s); // palette v-padding
+        int qR  = r(8  * s); // palette right padding
+        int qL  = r(5  * s); // palette left padding
         int pb  = r(11 * s); // batch progress bar height
         int pt  = r(20 * s); // total progress bar height
-        int hf  = r(15 * s); // help-button emoji font
+        int hf  = r(16 * s); // help-button emoji font
 
         return ".root { -fx-font-size: " + f + "px; }\n"
              + ".tool-bar { -fx-padding: " + pV + " " + p1 + " " + pV + " " + p1 + "; }\n"

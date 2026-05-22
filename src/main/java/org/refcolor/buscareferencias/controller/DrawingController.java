@@ -55,7 +55,10 @@ public class DrawingController {
 
     private static final Logger logger = LoggerFactory.getLogger(DrawingController.class);
 
-    private static final double LINE_WIDTH = 5.0;
+    /** Target visual stroke width in screen pixels. Compensated per scale. */
+    private static final double LINE_WIDTH = 10.0;
+    /** Visual eraser half-size in screen pixels. */
+    private static final double ERASER_RADIUS = 18.0;
     private static final Color CANVAS_FRAME_COLOR = Color.web("#b0b7c3");
     private static final int UNDO_STACK_LIMIT = 20;
 
@@ -106,15 +109,21 @@ public class DrawingController {
     private boolean resizingCanvas = false;
     private double resizeStartX, resizeStartY, resizeStartW, resizeStartH;
 
+    /** Current canvas display scale (updated by updateCanvasScaleToViewport). */
+    private double currentScale = 1.0;
+    /** Effective canvas-pixel line width (= LINE_WIDTH / currentScale, clamped). */
+    private double effectiveLineWidth = LINE_WIDTH;
+
     private static final double CANVAS_INITIAL_W = 900;
     private static final double CANVAS_INITIAL_H = 600;
     private static final double CANVAS_MIN_W = 500;
     private static final double CANVAS_MIN_H = 350;
     private static final double CANVAS_MAX_W = 1600;
     private static final double CANVAS_MAX_H = 1200;
+    private static final double BREAKPOINT_LARGE   = 1680;
     private static final double BREAKPOINT_COMPACT = 1180;
-    private static final double BREAKPOINT_PHONE = 820;
-    private static final double CANVAS_VIEW_PADDING = 24;
+    private static final double BREAKPOINT_PHONE   = 820;
+    private static final double CANVAS_VIEW_PADDING = 12;
 
     private boolean responsiveListenersAttached = false;
     private double currentGalleryImageSize = 150;
@@ -203,6 +212,8 @@ public class DrawingController {
         canvas.setWidth(newW);
         canvas.setHeight(newH);
         clearToWhite();
+        // Draw at original position — no stretching, so strokes stay crisp.
+        // Enlarging the canvas just adds white space; shrinking clips the edge.
         gc.drawImage(snapshot, 0, 0);
         drawCanvasFrame();
     }
@@ -232,30 +243,36 @@ public class DrawingController {
     private void applyResponsiveMode(double sceneWidth, double sceneHeight) {
         if (rootPane == null) return;
 
+        boolean large   = sceneWidth >= BREAKPOINT_LARGE;
         boolean compact = sceneWidth < BREAKPOINT_COMPACT;
-        boolean phone = sceneWidth < BREAKPOINT_PHONE;
+        boolean phone   = sceneWidth < BREAKPOINT_PHONE;
         boolean touchMode = phone || sceneHeight < 620;
 
-        rootPane.getStyleClass().removeAll("compact-mode", "phone-mode", "touch-mode");
-        if (compact) rootPane.getStyleClass().add("compact-mode");
-        if (phone) rootPane.getStyleClass().add("phone-mode");
+        rootPane.getStyleClass().removeAll("large-mode", "compact-mode", "phone-mode", "touch-mode");
+        if (large)     rootPane.getStyleClass().add("large-mode");
+        if (compact)   rootPane.getStyleClass().add("compact-mode");
+        if (phone)     rootPane.getStyleClass().add("phone-mode");
         if (touchMode) rootPane.getStyleClass().add("touch-mode");
 
         if (sidePalette != null) {
             if (phone) {
-                sidePalette.setPrefWidth(136);
-                sidePalette.setMinWidth(112);
+                sidePalette.setPrefWidth(144);
+                sidePalette.setMinWidth(120);
             } else if (compact) {
-                sidePalette.setPrefWidth(160);
-                sidePalette.setMinWidth(136);
+                sidePalette.setPrefWidth(178);
+                sidePalette.setMinWidth(150);
+            } else if (large) {
+                sidePalette.setPrefWidth(232);
+                sidePalette.setMinWidth(210);
             } else {
-                sidePalette.setPrefWidth(200);
-                sidePalette.setMinWidth(180);
+                sidePalette.setPrefWidth(210);
+                sidePalette.setMinWidth(190);
             }
         }
 
         if (canvasGallerySplitPane != null) {
-            canvasGallerySplitPane.setDividerPositions(phone ? 0.48 : 0.55);
+            double divider = phone ? 0.48 : (sceneHeight >= 1000 ? 0.65 : 0.60);
+            canvasGallerySplitPane.setDividerPositions(divider);
         }
     }
 
@@ -278,21 +295,50 @@ public class DrawingController {
 
     private void setupCanvasAutoFit() {
         if (canvasRoot == null || canvasContainer == null || canvas == null) return;
+        // Pin the container to the canvas pixel size so the parent StackPane
+        // cannot resize it. Without this, the parent shrinks the container and
+        // the subsequent Scale transform makes the canvas appear tiny.
+        syncContainerSize();
         canvasRoot.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
         canvasRoot.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
-        canvas.widthProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
-        canvas.heightProperty().addListener((obs, oldV, newV) -> updateCanvasScaleToViewport());
+        canvas.widthProperty().addListener((obs, oldV, newV) -> { syncContainerSize(); updateCanvasScaleToViewport(); });
+        canvas.heightProperty().addListener((obs, oldV, newV) -> { syncContainerSize(); updateCanvasScaleToViewport(); });
         updateCanvasScaleToViewport();
+    }
+
+    /**
+     * Locks canvasContainer to exactly the canvas pixel dimensions.
+     * This prevents the parent StackPane from resizing the container,
+     * which would break the scale-to-fit calculation.
+     */
+    private void syncContainerSize() {
+        if (canvasContainer == null || canvas == null) return;
+        double w = canvas.getWidth();
+        double h = canvas.getHeight();
+        canvasContainer.setPrefWidth(w);
+        canvasContainer.setPrefHeight(h);
+        canvasContainer.setMinWidth(w);
+        canvasContainer.setMinHeight(h);
+        canvasContainer.setMaxWidth(w);
+        canvasContainer.setMaxHeight(h);
     }
 
     private void updateCanvasScaleToViewport() {
         if (canvasRoot == null || canvasContainer == null || canvas == null) return;
-        double availableW = Math.max(120, canvasRoot.getWidth() - CANVAS_VIEW_PADDING);
+        double availableW = Math.max(120, canvasRoot.getWidth()  - CANVAS_VIEW_PADDING);
         double availableH = Math.max(120, canvasRoot.getHeight() - CANVAS_VIEW_PADDING);
-        double scale = Math.min(availableW / Math.max(1, canvas.getWidth()), availableH / Math.max(1, canvas.getHeight()));
-        scale = clamp(scale, 0.35, 1.8);
+        double scale = Math.min(availableW / Math.max(1, canvas.getWidth()),
+                                availableH / Math.max(1, canvas.getHeight()));
+        scale = clamp(scale, 0.35, 2.5);
+        currentScale = scale;
         canvasContainer.setScaleX(scale);
         canvasContainer.setScaleY(scale);
+
+        // Keep visual stroke thickness constant regardless of display scale.
+        // Clamp so lines don't become excessively thick at very small scales
+        // or unusably thin at very large ones.
+        effectiveLineWidth = clamp(LINE_WIDTH / scale, LINE_WIDTH / 2.0, LINE_WIDTH * 2.5);
+        if (gc != null) gc.setLineWidth(effectiveLineWidth);
     }
 
     private void setupGalleryResponsive() {
@@ -313,7 +359,10 @@ public class DrawingController {
         double available = galleryPane.getWidth();
         if (available <= 0) available = sceneWidth < BREAKPOINT_PHONE ? 320 : 760;
 
-        double target = sceneWidth < BREAKPOINT_PHONE ? 120 : (sceneWidth < BREAKPOINT_COMPACT ? 136 : 150);
+        double target = sceneWidth < BREAKPOINT_PHONE ? 120
+                      : sceneWidth < BREAKPOINT_COMPACT ? 136
+                      : sceneWidth >= BREAKPOINT_LARGE  ? 180
+                      : 150;
         int cols = Math.max(2, (int) Math.floor((available + 12) / (target + 12)));
         currentGalleryImageSize = clamp((available - ((cols - 1) * 12.0)) / cols, 104, 170);
         galleryPane.setPrefWrapLength(available);
@@ -352,11 +401,12 @@ public class DrawingController {
             colorBtn.getStyleClass().add("palette-button");
             colorBtn.setUserData(part); // for re-selection after rebuild
 
-            // Swatch circular más grande y suave
-            javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(10, Color.web(part.getHexColor()));
-            dot.setStroke(Color.rgb(255, 255, 255, 0.18));
-            dot.setStrokeWidth(1.5);
-            colorBtn.setGraphic(dot);
+            // Swatch rectangular — barra de color prominente en el lateral
+            javafx.scene.shape.Rectangle swatch = new javafx.scene.shape.Rectangle(28, 38, Color.web(part.getHexColor()));
+            swatch.setArcWidth(6); swatch.setArcHeight(6);
+            swatch.setStroke(Color.rgb(255, 255, 255, 0.28));
+            swatch.setStrokeWidth(1.0);
+            colorBtn.setGraphic(swatch);
             colorBtn.setGraphicTextGap(10);
             colorBtn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
 
@@ -381,19 +431,22 @@ public class DrawingController {
     private static void applyPaletteButtonStyle(ToggleButton btn, AnatomyPart part, boolean selected) {
         String hex = part.getHexColor();
         Color c = Color.web(hex);
-        // Fondo tintado al 12% del color de la parte cuando está seleccionado
-        String tint = String.format("rgba(%d,%d,%d,0.12)",
-                (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));
+        int r = (int)(c.getRed() * 255), g = (int)(c.getGreen() * 255), b = (int)(c.getBlue() * 255);
         if (selected) {
+            String tint = String.format("rgba(%d,%d,%d,0.24)", r, g, b);
+            String glow = String.format("rgba(%d,%d,%d,0.60)", r, g, b);
             btn.setStyle(
-                "-fx-border-color: " + hex + " transparent " + hex + " " + hex + ";" +
-                "-fx-border-width: 1 0 1 3;" +
-                "-fx-background-color: " + tint + ";"
+                "-fx-border-color: " + hex + " rgba(255,255,255,0.06) " + hex + " " + hex + ";" +
+                "-fx-border-width: 1 1 1 4;" +
+                "-fx-background-color: " + tint + ";" +
+                "-fx-effect: dropshadow(gaussian, " + glow + ", 14, 0, 3, 0);"
             );
         } else {
+            String subtleTint = String.format("rgba(%d,%d,%d,0.06)", r, g, b);
             btn.setStyle(
-                "-fx-border-color: transparent transparent transparent " + hex + ";" +
-                "-fx-border-width: 0 0 0 3;"
+                "-fx-border-color: rgba(255,255,255,0.03) transparent rgba(255,255,255,0.03) " + hex + ";" +
+                "-fx-border-width: 1 0 1 3;" +
+                "-fx-background-color: " + subtleTint + ";"
             );
         }
     }
@@ -423,10 +476,12 @@ public class DrawingController {
         redoStack.clear();
         lastX = x; lastY = y;
         if (btnErase.isSelected()) {
+            double er = ERASER_RADIUS / currentScale;
             gc.setFill(Color.WHITE);
-            gc.fillRect(x - 10, y - 10, 20, 20);
+            gc.fillRect(x - er, y - er, er * 2, er * 2);
         } else {
             gc.setStroke(Color.web(currentPart.getHexColor()));
+            gc.setLineWidth(effectiveLineWidth);
             gc.beginPath();
             gc.moveTo(lastX, lastY);
             gc.lineTo(lastX, lastY);
@@ -436,8 +491,9 @@ public class DrawingController {
 
     private void continueStroke(double x, double y) {
         if (btnErase.isSelected()) {
+            double er = ERASER_RADIUS / currentScale;
             gc.setFill(Color.WHITE);
-            gc.fillRect(x - 10, y - 10, 20, 20);
+            gc.fillRect(x - er, y - er, er * 2, er * 2);
         } else {
             gc.lineTo(x, y);
             gc.stroke();

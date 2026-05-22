@@ -43,13 +43,13 @@
     <center>
         <BorderPane>
             <left>
-                <VBox fx:id="sidePalette" spacing="10" prefWidth="200" minWidth="180" styleClass="side-palette">
+                <VBox fx:id="sidePalette" spacing="5" prefWidth="210" minWidth="190" styleClass="side-palette">
                     <padding>
-                        <Insets top="10" right="10" bottom="10" left="10"/>
+                        <Insets top="8" right="8" bottom="8" left="8"/>
                     </padding>
                     <Label fx:id="lblPalette" text="PALETA DE CUERPO" styleClass="section-title" />
                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                        <VBox fx:id="paletteContainer" spacing="8" styleClass="palette-container">
+                        <VBox fx:id="paletteContainer" spacing="4" styleClass="palette-container">
                             <!-- Los botones de la paleta se generan dinámicamente -->
                         </VBox>
                     </ScrollPane>
@@ -58,7 +58,7 @@
 
             <center>
                 <!-- SplitPane VERTICAL: canvas arriba / galería abajo -->
-                <SplitPane fx:id="canvasGallerySplitPane" orientation="VERTICAL" dividerPositions="0.55">
+                <SplitPane fx:id="canvasGallerySplitPane" orientation="VERTICAL" dividerPositions="0.60">
                     <StackPane fx:id="canvasRoot" styleClass="canvas-root" minHeight="320">
                         <StackPane fx:id="canvasContainer" styleClass="canvas-container" minWidth="280" minHeight="220" prefWidth="900" prefHeight="600" maxWidth="1600" maxHeight="1200">
                             <Canvas fx:id="canvas"
@@ -69,10 +69,10 @@
                         </StackPane>
                     </StackPane>
 
-                    <VBox spacing="6" styleClass="gallery-root">
+                    <VBox spacing="4" styleClass="gallery-root">
                         <Label fx:id="lblGallery" text="GALERÍA DE REFERENCIAS" styleClass="section-title"/>
                         <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                            <FlowPane fx:id="galleryPane" hgap="12" vgap="12" prefWrapLength="900" styleClass="gallery-pane">
+                            <FlowPane fx:id="galleryPane" hgap="10" vgap="10" prefWrapLength="900" styleClass="gallery-pane">
                                 <!-- Las imágenes aparecen aquí -->
                             </FlowPane>
                         </ScrollPane>
