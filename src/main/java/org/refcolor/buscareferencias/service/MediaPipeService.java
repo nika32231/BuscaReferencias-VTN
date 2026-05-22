@@ -272,18 +272,9 @@ public class MediaPipeService {
 
         double coverageFactor = calculateCoverageFactor(drawingPose, imagePose);
 
-        double finalScore;
         boolean hasEmbeddings = cosine > 0.0;
-        if (jointCount <= 4) {
-            // Dibujo parcial (p. ej. solo cabeza): posición y cobertura
-            finalScore = Math.max(partial, headSim) * coverageFactor;
-        } else if (hasEmbeddings) {
-            finalScore = ((0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour)) * coverageFactor;
-        } else {
-            finalScore = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
-            finalScore = Math.max(finalScore, partial * 0.25);
-            finalScore *= coverageFactor;
-        }
+        double finalScore = computeWeightedScore(
+                jointCount, hasEmbeddings, partial, headSim, cosine, angles, skeleton, contour, coverageFactor);
         finalScore = Math.max(0.0, Math.min(1.0, finalScore));
         logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} skeleton={} contour={} coverage={} final={}",
                 jointCount,
@@ -293,6 +284,27 @@ public class MediaPipeService {
                 String.format("%.4f", coverageFactor),
                 String.format("%.4f", finalScore));
         return finalScore;
+    }
+
+    /**
+     * Selecciona la fórmula de puntuación según el tipo de dibujo y disponibilidad de embeddings.
+     * Aplica "early return" para evitar if-else anidados.
+     */
+    private static double computeWeightedScore(
+            int jointCount, boolean hasEmbeddings,
+            double partial, double headSim, double cosine,
+            double angles, double skeleton, double contour,
+            double coverageFactor) {
+        if (jointCount <= 4) {
+            // Dibujo parcial (p. ej. solo cabeza): posición y cobertura
+            return Math.max(partial, headSim) * coverageFactor;
+        }
+        if (hasEmbeddings) {
+            return ((0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour)) * coverageFactor;
+        }
+        double score = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
+        score = Math.max(score, partial * 0.25);
+        return score * coverageFactor;
     }
 
     /**
@@ -400,14 +412,7 @@ public class MediaPipeService {
                 drawCenter = estimateJointCenter(joints);
             }
 
-            javafx.geometry.Point2D imgCenter = null;
-            if (lm.containsKey(23) && lm.containsKey(24)) {
-                imgCenter = new javafx.geometry.Point2D((lm.get(23).getX() + lm.get(24).getX()) / 2.0, (lm.get(23).getY() + lm.get(24).getY()) / 2.0);
-            } else if (lm.containsKey(11) && lm.containsKey(12)) {
-                imgCenter = new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0, (lm.get(11).getY() + lm.get(12).getY()) / 2.0);
-            } else if (lm.containsKey(0)) {
-                imgCenter = lm.get(0);
-            }
+            javafx.geometry.Point2D imgCenter = findImageCenter(lm);
 
             if (drawCenter == null || imgCenter == null) {
                 return headOnlySimilarity(joints, lm);
@@ -427,18 +432,8 @@ public class MediaPipeService {
                 if (!joints.containsKey(part)) continue;
                 javafx.geometry.Point2D drawP = joints.get(part);
                 Integer[] ids = entry.getValue();
-                javafx.geometry.Point2D imgP = null;
-                int found = 0;
-                double sumX = 0, sumY = 0;
-                for (int id : ids) {
-                    if (lm.containsKey(id)) {
-                        sumX += lm.get(id).getX();
-                        sumY += lm.get(id).getY();
-                        found++;
-                    }
-                }
-                if (found == 0) continue;
-                imgP = new javafx.geometry.Point2D(sumX / found, sumY / found);
+                javafx.geometry.Point2D imgP = averageLandmark(lm, ids);
+                if (imgP == null) continue;
 
                 double ndx = (drawP.getX() - drawCenter.getX()) / drawScale;
                 double ndy = (drawP.getY() - drawCenter.getY()) / drawScale;
@@ -475,6 +470,26 @@ public class MediaPipeService {
         // Tolerancia convertida a espacio 0-1
         double tolerance = PoseToleranceConfig.skeletonTolerance(AnatomyPart.HEAD) * 0.06;
         return Math.max(0.0, 1.0 - (dist / tolerance));
+    }
+
+    /**
+     * Localiza el centro del cuerpo en la imagen usando la prioridad:
+     * caderas (23,24) → hombros (11,12) → nariz (0).
+     * Devuelve null si ningún landmark de referencia está disponible.
+     */
+    private static javafx.geometry.Point2D findImageCenter(
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (lm.containsKey(23) && lm.containsKey(24)) {
+            return new javafx.geometry.Point2D(
+                    (lm.get(23).getX() + lm.get(24).getX()) / 2.0,
+                    (lm.get(23).getY() + lm.get(24).getY()) / 2.0);
+        }
+        if (lm.containsKey(11) && lm.containsKey(12)) {
+            return new javafx.geometry.Point2D(
+                    (lm.get(11).getX() + lm.get(12).getX()) / 2.0,
+                    (lm.get(11).getY() + lm.get(12).getY()) / 2.0);
+        }
+        return lm.containsKey(0) ? lm.get(0) : null;
     }
 
     private static javafx.geometry.Point2D estimateJointCenter(
@@ -563,82 +578,107 @@ public class MediaPipeService {
         return new double[]{minX, minY, maxX - minX, maxY - minY};
     }
 
+    /**
+     * Combina 4 componentes de similitud angular (torso, brazos, manos arriba, piernas).
+     * Cada scorer devuelve double[]{score, weight}; si no aplica, devuelve {0, 0}.
+     */
     private static double calculateAngleBasedSimilarity(PoseData drawingPose, PoseData imagePose) {
+        var joints = drawingPose.getAllJoints();
+        var lm    = imagePose.getAllLandmarks();
         double totalScore = 0;
         double totalWeight = 0;
-        var lm = imagePose.getAllLandmarks();
-        var joints = drawingPose.getAllJoints();
-        
-        // 1. Inclinación del Torso
-        if (joints.containsKey(AnatomyPart.HEAD) && joints.containsKey(AnatomyPart.TORSO)) {
-            double drawTorsoAngle = Math.atan2(joints.get(AnatomyPart.HEAD).getY() - joints.get(AnatomyPart.TORSO).getY(),
-                                               joints.get(AnatomyPart.HEAD).getX() - joints.get(AnatomyPart.TORSO).getX());
-            if (lm.containsKey(0) && lm.containsKey(11) && lm.containsKey(12)) {
-                double midShoulderX = (lm.get(11).getX() + lm.get(12).getX()) / 2;
-                double midShoulderY = (lm.get(11).getY() + lm.get(12).getY()) / 2;
-                double imgTorsoAngle = Math.atan2(lm.get(0).getY() - midShoulderY, lm.get(0).getX() - midShoulderX);
-                double diff = Math.abs(drawTorsoAngle - imgTorsoAngle);
-                while (diff > Math.PI) diff = 2 * Math.PI - diff;
-                totalScore += (1.0 - (diff / Math.PI)) * 3.0;
-                totalWeight += 3.0;
-            }
-        }
-
-        // 2. Ángulos de los brazos
-        if (joints.containsKey(AnatomyPart.TORSO) && joints.containsKey(AnatomyPart.ARMS) && joints.containsKey(AnatomyPart.FOREARMS)) {
-            double drawArmAngle = PoseData.calculateAngle(joints.get(AnatomyPart.TORSO), joints.get(AnatomyPart.ARMS), joints.get(AnatomyPart.FOREARMS));
-            double bestArmScore = 0;
-            if (lm.containsKey(11) && lm.containsKey(13) && lm.containsKey(15)) {
-                double imgArmL = PoseData.calculateAngle(lm.get(11), lm.get(13), lm.get(15));
-                double diff = Math.abs(drawArmAngle - imgArmL);
-                if (diff > 180) diff = 360 - diff;
-                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / PoseToleranceConfig.armAngleTolerance()));
-            }
-            if (lm.containsKey(12) && lm.containsKey(14) && lm.containsKey(16)) {
-                double imgArmR = PoseData.calculateAngle(lm.get(12), lm.get(14), lm.get(16));
-                double diff = Math.abs(drawArmAngle - imgArmR);
-                if (diff > 180) diff = 360 - diff;
-                bestArmScore = Math.max(bestArmScore, 1.0 - (diff / PoseToleranceConfig.armAngleTolerance()));
-            }
-            if (bestArmScore > 0) {
-                totalScore += bestArmScore * 2.0;
-                totalWeight += 2.0;
-            }
-        }
-
-        // 3. Brazos levantados
-        if (joints.containsKey(AnatomyPart.HEAD) && joints.containsKey(AnatomyPart.HANDS)) {
-            boolean drawHandsUp = joints.get(AnatomyPart.HANDS).getY() < joints.get(AnatomyPart.HEAD).getY();
-            if (lm.containsKey(15) || lm.containsKey(16)) {
-                double headY = lm.containsKey(0) ? lm.get(0).getY() : 0.2;
-                boolean imgHandsUp = (lm.containsKey(15) && lm.get(15).getY() < headY) || (lm.containsKey(16) && lm.get(16).getY() < headY);
-                if (drawHandsUp == imgHandsUp) totalScore += 2.0;
-                totalWeight += 2.0;
-            }
-        }
-
-        // 4. Piernas
-        if (joints.containsKey(AnatomyPart.THIGHS) && joints.containsKey(AnatomyPart.CALVES) && joints.containsKey(AnatomyPart.FEET)) {
-             double drawLegAngle = PoseData.calculateAngle(joints.get(AnatomyPart.THIGHS), joints.get(AnatomyPart.CALVES), joints.get(AnatomyPart.FEET));
-             double bestLegScore = 0;
-             if (lm.containsKey(23) && lm.containsKey(25) && lm.containsKey(27)) {
-                 double imgLegL = PoseData.calculateAngle(lm.get(23), lm.get(25), lm.get(27));
-                 double diff = Math.abs(drawLegAngle - imgLegL);
-                 if (diff > 180) diff = 360 - diff;
-                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / PoseToleranceConfig.legAngleTolerance()));
-             }
-             if (lm.containsKey(24) && lm.containsKey(26) && lm.containsKey(28)) {
-                 double imgLegR = PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28));
-                 double diff = Math.abs(drawLegAngle - imgLegR);
-                 if (diff > 180) diff = 360 - diff;
-                 bestLegScore = Math.max(bestLegScore, 1.0 - (diff / PoseToleranceConfig.legAngleTolerance()));
-             }
-             if (bestLegScore > 0) {
-                 totalScore += bestLegScore * 1.5;
-                 totalWeight += 1.5;
-             }
+        for (double[] c : new double[][]{
+                scoreTorsoTilt(joints, lm),
+                scoreArmAngle(joints, lm),
+                scoreHandsRaised(joints, lm),
+                scoreLegAngle(joints, lm)}) {
+            totalScore  += c[0];
+            totalWeight += c[1];
         }
         return totalWeight > 0 ? totalScore / totalWeight : 0;
+    }
+
+    /** Inclinación del torso: cabeza respecto a hombros. */
+    private static double[] scoreTorsoTilt(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (!joints.containsKey(AnatomyPart.HEAD) || !joints.containsKey(AnatomyPart.TORSO)) return new double[]{0, 0};
+        if (!lm.containsKey(0) || !lm.containsKey(11) || !lm.containsKey(12)) return new double[]{0, 0};
+        double drawAngle = Math.atan2(
+                joints.get(AnatomyPart.HEAD).getY() - joints.get(AnatomyPart.TORSO).getY(),
+                joints.get(AnatomyPart.HEAD).getX() - joints.get(AnatomyPart.TORSO).getX());
+        double midX = (lm.get(11).getX() + lm.get(12).getX()) / 2;
+        double midY = (lm.get(11).getY() + lm.get(12).getY()) / 2;
+        double imgAngle = Math.atan2(lm.get(0).getY() - midY, lm.get(0).getX() - midX);
+        double diff = Math.abs(drawAngle - imgAngle);
+        while (diff > Math.PI) diff = 2 * Math.PI - diff;
+        return new double[]{(1.0 - (diff / Math.PI)) * 3.0, 3.0};
+    }
+
+    /** Ángulo del codo: torso → hombro → antebrazo. Compara con ambos lados. */
+    private static double[] scoreArmAngle(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (!joints.containsKey(AnatomyPart.TORSO)
+                || !joints.containsKey(AnatomyPart.ARMS)
+                || !joints.containsKey(AnatomyPart.FOREARMS)) return new double[]{0, 0};
+        double drawAngle = PoseData.calculateAngle(
+                joints.get(AnatomyPart.TORSO), joints.get(AnatomyPart.ARMS), joints.get(AnatomyPart.FOREARMS));
+        double best = 0;
+        if (lm.containsKey(11) && lm.containsKey(13) && lm.containsKey(15)) {
+            best = Math.max(best, angleMatchScore(drawAngle,
+                    PoseData.calculateAngle(lm.get(11), lm.get(13), lm.get(15)),
+                    PoseToleranceConfig.armAngleTolerance()));
+        }
+        if (lm.containsKey(12) && lm.containsKey(14) && lm.containsKey(16)) {
+            best = Math.max(best, angleMatchScore(drawAngle,
+                    PoseData.calculateAngle(lm.get(12), lm.get(14), lm.get(16)),
+                    PoseToleranceConfig.armAngleTolerance()));
+        }
+        return best > 0 ? new double[]{best * 2.0, 2.0} : new double[]{0, 0};
+    }
+
+    /** Comprueba si las manos están levantadas por encima de la cabeza. */
+    private static double[] scoreHandsRaised(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (!joints.containsKey(AnatomyPart.HEAD) || !joints.containsKey(AnatomyPart.HANDS)) return new double[]{0, 0};
+        if (!lm.containsKey(15) && !lm.containsKey(16)) return new double[]{0, 0};
+        boolean drawHandsUp = joints.get(AnatomyPart.HANDS).getY() < joints.get(AnatomyPart.HEAD).getY();
+        double headY = lm.containsKey(0) ? lm.get(0).getY() : 0.2;
+        boolean imgHandsUp = (lm.containsKey(15) && lm.get(15).getY() < headY)
+                          || (lm.containsKey(16) && lm.get(16).getY() < headY);
+        return new double[]{drawHandsUp == imgHandsUp ? 2.0 : 0.0, 2.0};
+    }
+
+    /** Ángulo de la rodilla: muslo → pantorrilla → pie. Compara con ambas piernas. */
+    private static double[] scoreLegAngle(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (!joints.containsKey(AnatomyPart.THIGHS)
+                || !joints.containsKey(AnatomyPart.CALVES)
+                || !joints.containsKey(AnatomyPart.FEET)) return new double[]{0, 0};
+        double drawAngle = PoseData.calculateAngle(
+                joints.get(AnatomyPart.THIGHS), joints.get(AnatomyPart.CALVES), joints.get(AnatomyPart.FEET));
+        double best = 0;
+        if (lm.containsKey(23) && lm.containsKey(25) && lm.containsKey(27)) {
+            best = Math.max(best, angleMatchScore(drawAngle,
+                    PoseData.calculateAngle(lm.get(23), lm.get(25), lm.get(27)),
+                    PoseToleranceConfig.legAngleTolerance()));
+        }
+        if (lm.containsKey(24) && lm.containsKey(26) && lm.containsKey(28)) {
+            best = Math.max(best, angleMatchScore(drawAngle,
+                    PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28)),
+                    PoseToleranceConfig.legAngleTolerance()));
+        }
+        return best > 0 ? new double[]{best * 1.5, 1.5} : new double[]{0, 0};
+    }
+
+    /** Normaliza la diferencia de ángulo (0-360) a un score [0,1] según tolerancia. */
+    private static double angleMatchScore(double drawAngle, double imgAngle, double tolerance) {
+        double diff = Math.abs(drawAngle - imgAngle);
+        if (diff > 180) diff = 360 - diff;
+        return Math.max(0.0, 1.0 - (diff / tolerance));
     }
 
     private static double calculateCosineSimilarity(List<Double> vec1, List<Double> vec2) {

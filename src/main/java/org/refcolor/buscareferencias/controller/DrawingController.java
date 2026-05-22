@@ -555,13 +555,8 @@ public class DrawingController {
         if (lblTotal        != null) lblTotal.setText(I18n.t("section.progress.total"));
 
         // Initial status (only if it still shows the ready message)
-        if (statusLabel != null) {
-            String cur = statusLabel.getText();
-            // Update if it shows a ready-like message or empty
-            if (cur == null || cur.isBlank()
-                    || cur.equals("Listo para dibujar") || cur.equals("Ready to draw")) {
-                statusLabel.setText(I18n.t("status.ready"));
-            }
+        if (statusLabel != null && shouldResetStatusToReady(statusLabel.getText())) {
+            statusLabel.setText(I18n.t("status.ready"));
         }
 
         // Rebuild palette to translate anatomy part names
@@ -574,6 +569,14 @@ public class DrawingController {
         if (tutorialOverlay != null) {
             tutorialOverlay.applyI18n();
         }
+    }
+
+    /** True si el statusLabel aún muestra el mensaje inicial (vacío o "ready"). */
+    private static boolean shouldResetStatusToReady(String currentText) {
+        return currentText == null
+            || currentText.isBlank()
+            || currentText.equals("Listo para dibujar")
+            || currentText.equals("Ready to draw");
     }
 
     @FXML
@@ -770,60 +773,75 @@ public class DrawingController {
     private void displayResults(List<ImageResult> results) {
         applyGalleryResponsiveLayout();
         if (results == null || results.isEmpty()) return;
-
         int rank = 1;
         for (ImageResult result : results) {
-            VBox card = new VBox(5);
-            card.getStyleClass().add("image-card");
-            card.setAlignment(Pos.CENTER);
-            card.setPrefWidth(currentGalleryImageSize + 10);
-            card.setPrefHeight(currentGalleryImageSize + 56);
-
-            ImageView iv = new ImageView();
-            iv.setFitWidth(currentGalleryImageSize);
-            iv.setFitHeight(currentGalleryImageSize);
-            iv.setPreserveRatio(true);
-
-            try {
-                String thumbUrl = result.getDisplayThumbnailUrl() == null || result.getDisplayThumbnailUrl().isBlank()
-                        ? result.getThumbnailUrl() : result.getDisplayThumbnailUrl();
-                Image img = new Image(thumbUrl, currentGalleryImageSize, currentGalleryImageSize, true, true, true);
-                iv.setImage(img);
-                img.exceptionProperty().addListener((obs, oldEx, newEx) -> {
-                    if (newEx != null) logger.warn("Error al cargar imagen: {}", thumbUrl);
-                });
-            } catch (Exception e) {
-                logger.warn("Error al instanciar imagen: {}", result.getThumbnailUrl());
-            }
-
-            Label rankBadge = new Label(String.valueOf(rank));
-            rankBadge.getStyleClass().add("gallery-rank");
-            StackPane imageStack = new StackPane(iv, rankBadge);
-            StackPane.setAlignment(rankBadge, Pos.TOP_LEFT);
-
-            Label label;
-            if (result.getScore() <= 0.0) {
-                label = new Label(String.format("#%d · %s", rank,
-                        result.getTitle() == null || result.getTitle().isBlank() ? "Ref" : result.getTitle()));
-                label.setStyle("-fx-font-size: 11px; -fx-text-fill: #8880b0;");
-            } else {
-                double pct = result.getScore() * 100;
-                label = new Label(I18n.fmt("gallery.similarity", Math.round(pct)));
-                label.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 3 8 3 8;" +
-                    "-fx-background-radius: 8; -fx-background-color: " +
-                    (pct >= 60 ? "rgba(104,211,145,0.18); -fx-text-fill: #68d391;"
-                               : "rgba(252,129,129,0.18); -fx-text-fill: #fc8181;"));
-            }
-
-            card.getChildren().addAll(imageStack, label);
-            card.setCursor(Cursor.HAND);
-            Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
-            card.setOnMouseClicked(e -> openResultSource(result));
-            galleryPane.getChildren().add(card);
-            rank++;
+            galleryPane.getChildren().add(buildGalleryCard(result, rank++));
         }
         refreshGalleryCardsSize();
         logger.info("[GALLERY] {} resultados mostrados", results.size());
+    }
+
+    private VBox buildGalleryCard(ImageResult result, int rank) {
+        VBox card = new VBox(5);
+        card.getStyleClass().add("image-card");
+        card.setAlignment(Pos.CENTER);
+        card.setPrefWidth(currentGalleryImageSize + 10);
+        card.setPrefHeight(currentGalleryImageSize + 56);
+
+        Label rankBadge = new Label(String.valueOf(rank));
+        rankBadge.getStyleClass().add("gallery-rank");
+        StackPane imageStack = new StackPane(buildCardImageView(result), rankBadge);
+        StackPane.setAlignment(rankBadge, Pos.TOP_LEFT);
+
+        card.getChildren().addAll(imageStack, buildScoreLabel(result, rank));
+        card.setCursor(Cursor.HAND);
+        Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
+        card.setOnMouseClicked(e -> openResultSource(result));
+        return card;
+    }
+
+    private ImageView buildCardImageView(ImageResult result) {
+        ImageView iv = new ImageView();
+        iv.setFitWidth(currentGalleryImageSize);
+        iv.setFitHeight(currentGalleryImageSize);
+        iv.setPreserveRatio(true);
+        try {
+            String thumbUrl = resolveThumbUrl(result);
+            Image img = new Image(thumbUrl, currentGalleryImageSize, currentGalleryImageSize, true, true, true);
+            iv.setImage(img);
+            img.exceptionProperty().addListener((obs, oldEx, newEx) -> {
+                if (newEx != null) logger.warn("Error al cargar imagen: {}", thumbUrl);
+            });
+        } catch (Exception e) {
+            logger.warn("Error al instanciar imagen: {}", result.getThumbnailUrl());
+        }
+        return iv;
+    }
+
+    private static String resolveThumbUrl(ImageResult result) {
+        String display = result.getDisplayThumbnailUrl();
+        return (display == null || display.isBlank()) ? result.getThumbnailUrl() : display;
+    }
+
+    private Label buildScoreLabel(ImageResult result, int rank) {
+        if (result.getScore() <= 0.0) {
+            String title = result.getTitle() == null || result.getTitle().isBlank() ? "Ref" : result.getTitle();
+            Label label = new Label(String.format("#%d · %s", rank, title));
+            label.setStyle("-fx-font-size: 11px; -fx-text-fill: #8880b0;");
+            return label;
+        }
+        double pct = result.getScore() * 100;
+        Label label = new Label(I18n.fmt("gallery.similarity", Math.round(pct)));
+        label.setStyle(buildScoreLabelStyle(pct));
+        return label;
+    }
+
+    private static String buildScoreLabelStyle(double pct) {
+        String colorPart = pct >= 60
+                ? "rgba(104,211,145,0.18); -fx-text-fill: #68d391;"
+                : "rgba(252,129,129,0.18); -fx-text-fill: #fc8181;";
+        return "-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 3 8 3 8;" +
+               "-fx-background-radius: 8; -fx-background-color: " + colorPart;
     }
 
     private String buildEmptySearchMessage() {
