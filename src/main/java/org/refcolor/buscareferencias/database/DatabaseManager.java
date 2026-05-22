@@ -20,7 +20,7 @@ import java.time.Instant;
 
 public class DatabaseManager {
     private static final Logger logger = LoggerFactory.getLogger(DatabaseManager.class);
-    private static final String URL = "jdbc:sqlite:buscareferencias.db";
+    private static volatile String dbUrl = "jdbc:sqlite:buscareferencias.db";
     private static final int DEFAULT_USER_ID = 1;
     // SQL extraído como constante para evitar duplicación (S1)
     private static final String SQL_INSERT_RESULTADO =
@@ -28,6 +28,19 @@ public class DatabaseManager {
         "puntuacion_similitud, similarity, landmarks, embedding, embeddings, poseAngles) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     private static volatile boolean schemaReady = false;
+
+    /**
+     * Reemplaza la URL de conexión a la BD y fuerza re-inicialización del esquema.
+     * <p><b>Solo para uso en tests.</b> Permite apuntar a una BD temporal aislada
+     * (p.ej. un fichero {@code @TempDir}) en lugar del fichero de producción,
+     * garantizando que los tests no contaminan ni dependen del estado persistente.</p>
+     *
+     * @param url URL JDBC de SQLite, p.ej. {@code "jdbc:sqlite:/tmp/test.db"}
+     */
+    public static void setDatabaseUrl(String url) {
+        dbUrl = url;
+        schemaReady = false;
+    }
 
     public static void ensureInitialized() {
         if (schemaReady) {
@@ -52,7 +65,7 @@ public class DatabaseManager {
             // Relanzar como SQLException para que el caller sepa que la conexión no es posible (B2)
             throw new SQLException("SQLite JDBC Driver not found", e);
         }
-        return DriverManager.getConnection(URL);
+        return DriverManager.getConnection(dbUrl);
     }
 
     public static int saveDrawing(PoseData pose, List<String> terms, List<org.refcolor.buscareferencias.model.ImageResult> results) {
@@ -64,7 +77,8 @@ public class DatabaseManager {
             conn.setAutoCommit(false);
             try (PreparedStatement pstmtDibujo = conn.prepareStatement(sqlDibujo, Statement.RETURN_GENERATED_KEYS)) {
                 pstmtDibujo.setInt(1, DEFAULT_USER_ID);
-                pstmtDibujo.setString(2, pose.toString());
+                // Persistir como JSON estructurado (no toString()) para que sea consultable (B6)
+                pstmtDibujo.setString(2, pose.getJointsJson());
                 pstmtDibujo.executeUpdate();
 
                 // try-with-resources para cerrar el ResultSet y evitar resource leak (B3)

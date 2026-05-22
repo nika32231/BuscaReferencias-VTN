@@ -465,51 +465,54 @@ public class DrawingController {
     }
 
     /**
-     * Genera el inline style para un botón-pastilla de paleta,
-     * con la misma estética que los botones de la barra de herramientas
-     * pero usando el color de cada parte anatómica.
+     * Genera el inline style para un botón-pastilla de paleta.
      *
-     * state 0 = normal   → gradiente oscuro del color, como toolbar button
-     * state 1 = hover    → gradiente ligeramente más claro
-     * state 2 = selected → gradiente brillante con glow, como toolbar:selected
+     * El fondo se obtiene mezclando el color de cada parte con el acero oscuro
+     * del toolbar (#243D52 / #1C3A50) en lugar de negro puro.
+     * Resultado: mismo nivel de oscuridad y saturación que los botones del toolbar
+     * pero con el matiz de cada parte claramente visible en borde y texto.
+     *
+     * state 0 = normal   → fondo acero tintado, borde y texto del color de la parte
+     * state 1 = hover    → fondo ligeramente más claro (más hacia el color propio)
+     * state 2 = selected → color completo brillante con glow, igual que toolbar:selected
      */
     private static String buildPillStyle(AnatomyPart part, int state) {
-        Color base = Color.web(part.getHexColor());
+        Color base  = Color.web(part.getHexColor());
+        // Color "acero oscuro" del toolbar: mezclarlo con el color de la parte
+        // desatura y oscurece a la vez, acercando el botón al look del toolbar
+        Color steel     = Color.web("#243D52");
+        Color steelDark = Color.web("#1C3A50");
 
-        // Variantes oscurecidas para estado normal/hover
-        String dark1  = toHex(base.interpolate(Color.BLACK, 0.38));
-        String dark2  = toHex(base.interpolate(Color.BLACK, 0.52));
-        String hover1 = toHex(base.interpolate(Color.BLACK, 0.24));
-        String hover2 = toHex(base.interpolate(Color.BLACK, 0.38));
+        // Normal: 25% del color propio + 75% del acero del toolbar
+        String dark1  = toHex(base.interpolate(steel,     0.75));
+        String dark2  = toHex(base.interpolate(steelDark, 0.80));
+        // Hover: 40% del color propio + 60% del acero → más vivo
+        String hover1 = toHex(base.interpolate(steel,     0.58));
+        String hover2 = toHex(base.interpolate(steelDark, 0.65));
 
-        // Variante clara para selected (top del gradiente)
-        String sel1   = toHex(base.interpolate(Color.WHITE, 0.18));
+        // Selected: gradiente del propio color (como toolbar:selected pero con el color de la parte)
+        String sel1   = toHex(base.interpolate(Color.WHITE, 0.20));
 
-        // Borde como rgba
-        Color bdrC  = base.interpolate(Color.BLACK, 0.60);
-        String bdr  = "rgba(" + (int)(bdrC.getRed()*255)  + "," +
-                                (int)(bdrC.getGreen()*255) + "," +
-                                (int)(bdrC.getBlue()*255)  + ",0.80)";
-        Color bdrHC = base.interpolate(Color.BLACK, 0.45);
-        String bdrH = "rgba(" + (int)(bdrHC.getRed()*255)  + "," +
-                                (int)(bdrHC.getGreen()*255) + "," +
-                                (int)(bdrHC.getBlue()*255)  + ",0.80)";
-
-        // Glow para selected
+        // Borde y texto: el color real de la parte (el indicador visible del color)
         int r = (int)(base.getRed()   * 255);
         int g = (int)(base.getGreen() * 255);
         int b = (int)(base.getBlue()  * 255);
+        // Borde: color real al 80 % de opacidad
+        String colorBdr  = "rgba(" + r + "," + g + "," + b + ",0.80)";
+        String colorBdrH = "rgba(" + r + "," + g + "," + b + ",0.95)";
+        // Texto: el color de la parte aclarado un 50 % para contraste sobre fondo oscuro
+        String textColor = toHex(base.interpolate(Color.WHITE, 0.50));
 
         return switch (state) {
             case 1 -> // hover
                 "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + hover1 + ", " + hover2 + ");" +
                 "-fx-background-radius: 10;" +
-                "-fx-border-color: " + bdrH + ";" +
-                "-fx-border-width: 1;" +
+                "-fx-border-color: " + colorBdrH + ";" +
+                "-fx-border-width: 1.5;" +
                 "-fx-border-radius: 10;" +
-                "-fx-text-fill: rgba(255,255,255,0.92);" +
+                "-fx-text-fill: " + textColor + ";" +
                 "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
-            case 2 -> // selected
+            case 2 -> // selected: color completo, igual que toolbar toggle:selected
                 "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + sel1 + ", " + part.getHexColor() + ");" +
                 "-fx-background-radius: 10;" +
                 "-fx-border-color: rgba(255,255,255,0.55);" +
@@ -518,13 +521,13 @@ public class DrawingController {
                 "-fx-text-fill: rgba(255,255,255,0.97);" +
                 "-fx-effect: dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.80), 22, 0.10, 0, 0)," +
                     "innershadow(gaussian, rgba(255,255,255,0.18), 4, 0, 0, 1);";
-            default -> // normal (0)
+            default -> // normal: fondo acero tintado + borde y texto del color real
                 "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + dark1 + ", " + dark2 + ");" +
                 "-fx-background-radius: 10;" +
-                "-fx-border-color: " + bdr + ";" +
-                "-fx-border-width: 1;" +
+                "-fx-border-color: " + colorBdr + ";" +
+                "-fx-border-width: 1.5;" +
                 "-fx-border-radius: 10;" +
-                "-fx-text-fill: rgba(189,199,201,0.92);" +
+                "-fx-text-fill: " + textColor + ";" +
                 "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
         };
     }

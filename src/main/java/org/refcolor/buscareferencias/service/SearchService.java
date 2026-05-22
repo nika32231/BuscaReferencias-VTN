@@ -28,6 +28,22 @@ import org.refcolor.buscareferencias.i18n.I18n;
 
 /**
  * Búsqueda local de fotos de referencia por similitud de pose (MediaPipe).
+ *
+ * <h3>Decisión de diseño: biblioteca local únicamente</h3>
+ * El sistema opera exclusivamente sobre una biblioteca de imágenes local
+ * configurada en {@code search.paths} dentro de {@code config.properties},
+ * sin realizar consultas a APIs externas ni motores de búsqueda en línea.
+ * Esta decisión fue tomada de forma consciente por las siguientes razones:
+ * <ul>
+ *   <li><b>Privacidad:</b> los bocetos del usuario no salen del equipo local.</li>
+ *   <li><b>Disponibilidad offline:</b> la herramienta funciona sin conexión a Internet.</li>
+ *   <li><b>Control del dataset:</b> el artista gestiona su propia colección de referencias.</li>
+ *   <li><b>Rendimiento:</b> evita latencia de red y límites de cuota de APIs externas.</li>
+ *   <li><b>Reproducibilidad:</b> los resultados son estables y no dependen de cambios en
+ *       servicios de terceros.</li>
+ * </ul>
+ * Si en el futuro se quisiera añadir búsqueda en línea, debería implementarse como
+ * un {@code SearchProvider} alternativo intercambiable, sin modificar esta clase.
  */
 public class SearchService {
     private static final Logger logger = LoggerFactory.getLogger(SearchService.class);

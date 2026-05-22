@@ -131,6 +131,25 @@ public class PoseData {
         return new org.json.JSONArray(embedding).toString();
     }
 
+    /**
+     * Serializa los joints del dibujo del usuario como JSON estructurado.
+     * Formato: {@code {"Cabeza":{"x":0.48,"y":0.23}, "Torso":{"x":0.50,"y":0.45}, ...}}
+     *
+     * <p>A diferencia de {@link #toString()}, produce JSON estándar consultable y
+     * parseable, en lugar de una cadena de depuración de formato libre. Usar este
+     * método al persistir los datos de pose del dibujo en la tabla {@code Dibujos}.</p>
+     */
+    public String getJointsJson() {
+        org.json.JSONObject json = new org.json.JSONObject();
+        joints.forEach((part, point) -> {
+            org.json.JSONObject p = new org.json.JSONObject();
+            p.put("x", point.getX());
+            p.put("y", point.getY());
+            json.put(part.getName(), p);
+        });
+        return json.toString();
+    }
+
     public void setLandmarksFromJson(String jsonStr) {
         if (jsonStr == null || jsonStr.isEmpty()) return;
         try {
