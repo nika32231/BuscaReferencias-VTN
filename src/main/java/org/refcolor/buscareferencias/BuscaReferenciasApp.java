@@ -59,7 +59,17 @@ public class BuscaReferenciasApp extends Application {
                 Math.min(sb.getWidth() / 1920.0, sb.getHeight() / 1080.0)));
             if (uiSc > 1.05) {
                 try {
-                    Path tmpCss = Files.createTempFile("refcolor-dpi-", ".css");
+                    Path tmpCss;
+                    if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
+                        tmpCss = Files.createTempFile("refcolor-dpi-", ".css");
+                        tmpCss.toFile().setReadable(true, true);
+                        tmpCss.toFile().setWritable(true, true);
+                    } else {
+                        java.nio.file.attribute.FileAttribute<java.util.Set<java.nio.file.attribute.PosixFilePermission>> attr =
+                            java.nio.file.attribute.PosixFilePermissions.asFileAttribute(
+                                java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+                        tmpCss = Files.createTempFile("refcolor-dpi-", ".css", attr);
+                    }
                     tmpCss.toFile().deleteOnExit();
                     Files.writeString(tmpCss, buildScaledCss(uiSc));
                     scene.getStylesheets().add(tmpCss.toUri().toString());

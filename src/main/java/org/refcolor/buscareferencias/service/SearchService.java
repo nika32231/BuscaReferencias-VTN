@@ -135,10 +135,16 @@ public class SearchService {
             onProgress.accept(new double[]{1.0, (double) cachedHits.size() / total, 0, 1});
         }
 
-        Collections.shuffle(needsAnalysis);
+        // Conservamos el orden más-reciente-primero de loadLocalCandidates() —
+        // el shuffle aleatorio destruía ese orden y hacía que fotos recién añadidas
+        // (las más probablemente relevantes) no se analizasen en las primeras rondas.
         int batchSize     = PoseToleranceConfig.analysisLimitPerSearch();
         int totalUncached = needsAnalysis.size();
         int totalRounds   = totalUncached == 0 ? 1 : (int) Math.ceil((double) totalUncached / batchSize);
+        // Mínimo de rondas antes de poder salir anticipadamente.
+        // Garantiza que en búsquedas sucesivas (con dibujos diferentes) se analicen
+        // suficientes imágenes nuevas antes de considerar que ya tenemos buen resultado.
+        final int minRoundsBeforeEarlyExit = Math.min(3, totalRounds);
         final int cachedCount = cachedHits.size();
 
         logger.info("Cacheadas (instantáneas): {}. Sin caché (por lotes de {}): {}.",
@@ -200,9 +206,12 @@ public class SearchService {
 
             analyzedSoFar = to;
 
-            if (hasHighSimilarityResult(allScored)) {
-                logger.info("[SEARCH] Resultado ≥{}% encontrado en vuelta {}. Finalizando.",
-                        (int) (HIGH_SIMILARITY_THRESHOLD * 100), round);
+            // Solo salir anticipadamente tras completar el mínimo de rondas requeridas.
+            // Esto evita que resultados cacheados de búsquedas anteriores disparen
+            // la salida antes de que se hayan analizado fotos con las partes nuevas dibujadas.
+            if (round >= minRoundsBeforeEarlyExit && hasHighSimilarityResult(allScored)) {
+                logger.info("[SEARCH] Resultado ≥{}% encontrado en vuelta {} (min={}). Finalizando.",
+                        (int) (HIGH_SIMILARITY_THRESHOLD * 100), round, minRoundsBeforeEarlyExit);
                 if (onStatus != null) onStatus.accept(I18n.t("status.matchFound"));
                 break;
             }

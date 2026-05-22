@@ -366,9 +366,12 @@ public class MediaPipeService {
         long extraInPhoto = photoRegions.stream().filter(r -> !drawingRegions.contains(r)).count();
         long missingFromPhoto = drawingRegions.stream().filter(r -> !photoRegions.contains(r)).count();
 
-        // La foto muestra más de lo dibujado → penalización fuerte
-        // Faltan partes que se dibujaron → penalización leve
-        double penalty = (extraInPhoto * 0.7 + missingFromPhoto * 0.15) / 4.0;
+        // La foto muestra MÁS de lo dibujado → penalización MUY leve (0.15/región).
+        //   Ejemplo: dibujas cabeza+pies → foto cuerpo completo tiene UPPER+ARMS extra.
+        //   No queremos penalizar esas fotos de cuerpo completo que son justo las deseadas.
+        // La foto le FALTA algo dibujado → penalización moderada (0.25/región).
+        //   Ejemplo: dibujas pies pero la foto no los muestra → sí es un desajuste real.
+        double penalty = (extraInPhoto * 0.15 + missingFromPhoto * 0.25) / 4.0;
         return Math.max(0.1, 1.0 - penalty);
     }
 
