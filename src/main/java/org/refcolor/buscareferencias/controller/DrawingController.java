@@ -6,13 +6,20 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.time.Duration;
 import java.time.Instant;
+import javafx.util.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+
+import javafx.animation.FadeTransition;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.ScaleTransition;
+import javafx.animation.Timeline;
 
 import javafx.application.HostServices;
 import javafx.application.Platform;
@@ -59,7 +66,7 @@ public class DrawingController {
     private static final double LINE_WIDTH = 10.0;
     /** Visual eraser half-size in screen pixels. */
     private static final double ERASER_RADIUS = 18.0;
-    private static final Color CANVAS_FRAME_COLOR = Color.web("#b0b7c3");
+    private static final Color CANVAS_FRAME_COLOR = Color.web("#BDC7C9");
     private static final int UNDO_STACK_LIMIT = 20;
 
     @FXML private Canvas canvas;
@@ -92,6 +99,8 @@ public class DrawingController {
     @FXML private StackPane canvasRoot;
     @FXML private SplitPane canvasGallerySplitPane;
     @FXML private FlowPane galleryPane;
+    @FXML private VBox galleryEmptyState;
+    @FXML private Label galleryEmptyLabel;
 
     private GraphicsContext gc;
     private AnatomyPart currentPart = AnatomyPart.HEAD;
@@ -126,7 +135,15 @@ public class DrawingController {
     private static final double CANVAS_VIEW_PADDING = 12;
 
     private boolean responsiveListenersAttached = false;
-    private double currentGalleryImageSize = 150;
+    private double  currentGalleryImageSize = 150;
+
+    // ── Interactividad ────────────────────────────────────────────────────────
+    /** Canvas transparente sobre el canvas principal para mostrar el cursor del borrador. */
+    private Canvas  cursorOverlay;
+    /** Etiqueta de pista mostrada cuando el lienzo está vacío. */
+    private Label   canvasHintLabel;
+    /** true una vez que el usuario ha trazado algún trazo (no borrador). */
+    private boolean canvasHasContent = false;
 
     public void setHostServices(HostServices hostServices) {
         this.hostServices = hostServices;
@@ -157,13 +174,17 @@ public class DrawingController {
         setupCanvasAutoFit();
         attachResponsiveListeners();
         setupGalleryResponsive();
+        setupCursorOverlay();
+        setupCanvasHint();
+        updateUndoRedoButtons();
+        updateGalleryEmptyState(true);
         setupTutorial();
 
         // i18n: apply initial locale texts and register listener for language changes
         I18n.addChangeListener(() -> Platform.runLater(this::applyI18n));
         applyI18n();
 
-        logger.info("[UI] DrawingController.initialize() end en {} ms", Duration.between(t0, Instant.now()).toMillis());
+        logger.info("[UI] DrawingController.initialize() end en {} ms", java.time.Duration.between(t0, Instant.now()).toMillis());
     }
 
     private void setupManualCanvasResize() {
@@ -277,7 +298,7 @@ public class DrawingController {
     }
 
     private void clearToWhite() {
-        gc.setFill(Color.WHITE);
+        gc.setFill(Color.web("#FAF8F6")); // crema cálida en lugar de blanco puro
         gc.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
         drawCanvasFrame();
     }
@@ -389,32 +410,49 @@ public class DrawingController {
         params.setFill(Color.TRANSPARENT);
         undoStack.push(canvas.snapshot(params, null));
         if (undoStack.size() > UNDO_STACK_LIMIT) undoStack.removeLast();
+        updateUndoRedoButtons();
     }
 
     private void setupPalette() {
         AnatomyPart selected = currentPart != null ? currentPart : AnatomyPart.HEAD;
         ToggleGroup paletteGroup = new ToggleGroup();
+
         for (AnatomyPart part : AnatomyPart.values()) {
+            if (!part.isPaletteItem()) continue;
+
             String partName = I18n.t("anatomy." + part.name());
+
             ToggleButton colorBtn = new ToggleButton(partName);
             colorBtn.setToggleGroup(paletteGroup);
-            colorBtn.getStyleClass().add("palette-button");
-            colorBtn.setUserData(part); // for re-selection after rebuild
-
-            // Swatch rectangular — barra de color prominente en el lateral
-            javafx.scene.shape.Rectangle swatch = new javafx.scene.shape.Rectangle(28, 38, Color.web(part.getHexColor()));
-            swatch.setArcWidth(6); swatch.setArcHeight(6);
-            swatch.setStroke(Color.rgb(255, 255, 255, 0.28));
-            swatch.setStrokeWidth(1.0);
-            colorBtn.setGraphic(swatch);
-            colorBtn.setGraphicTextGap(10);
+            colorBtn.getStyleClass().add("palette-pill-button");
+            colorBtn.setUserData(part);
+            colorBtn.setMaxWidth(Double.MAX_VALUE);
             colorBtn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
 
-            // Estilo con borde izquierdo del color de la parte
-            applyPaletteButtonStyle(colorBtn, part, false);
+            // Estilo inicial
+            colorBtn.setStyle(buildPillStyle(part, false));
 
-            colorBtn.selectedProperty().addListener((obs, was, now) ->
-                    applyPaletteButtonStyle(colorBtn, part, now));
+            // Hover: escala sutil que no interfiere con el fondo inline
+            colorBtn.hoverProperty().addListener((obs, was, now) -> {
+                if (!colorBtn.isSelected()) {
+                    double scale = now ? 1.025 : 1.0;
+                    colorBtn.setScaleX(scale);
+                    colorBtn.setScaleY(scale);
+                }
+            });
+
+            colorBtn.selectedProperty().addListener((obs, was, now) -> {
+                colorBtn.setStyle(buildPillStyle(part, now));
+                colorBtn.setScaleX(1.0);
+                colorBtn.setScaleY(1.0);
+                if (now) {
+                    ScaleTransition bounce = new ScaleTransition(Duration.millis(130), colorBtn);
+                    bounce.setFromX(0.94); bounce.setFromY(0.94);
+                    bounce.setToX(1.0);   bounce.setToY(1.0);
+                    bounce.setInterpolator(Interpolator.EASE_OUT);
+                    bounce.play();
+                }
+            });
 
             colorBtn.setOnAction(e -> {
                 currentPart = part;
@@ -428,32 +466,86 @@ public class DrawingController {
         }
     }
 
-    private static void applyPaletteButtonStyle(ToggleButton btn, AnatomyPart part, boolean selected) {
-        String hex = part.getHexColor();
-        Color c = Color.web(hex);
-        int r = (int)(c.getRed() * 255), g = (int)(c.getGreen() * 255), b = (int)(c.getBlue() * 255);
-        if (selected) {
-            String tint = String.format("rgba(%d,%d,%d,0.24)", r, g, b);
-            String glow = String.format("rgba(%d,%d,%d,0.60)", r, g, b);
-            btn.setStyle(
-                "-fx-border-color: " + hex + " rgba(255,255,255,0.06) " + hex + " " + hex + ";" +
-                "-fx-border-width: 1 1 1 4;" +
-                "-fx-background-color: " + tint + ";" +
-                "-fx-effect: dropshadow(gaussian, " + glow + ", 14, 0, 3, 0);"
-            );
+    /**
+     * Genera el inline style para un botón-pastilla de paleta.
+     *
+     * Estado normal  → pastilla 3D levantada: gradiente claro→oscuro,
+     *                  brillo en la parte superior (shine), borde inferior
+     *                  más oscuro a modo de rim para dar profundidad.
+     * Estado selected → pastilla hundida: gradiente invertido (oscuro→base),
+     *                  inner-shadow de pulsación, glow de color externo.
+     */
+    private static String buildPillStyle(AnatomyPart part, boolean selected) {
+        Color base     = Color.web(part.getHexColor());
+        String lightHex = toHex(base.interpolate(Color.WHITE, 0.32));
+        String darkHex  = toHex(base.interpolate(Color.BLACK, 0.35));
+        String rimHex   = toHex(base.interpolate(Color.BLACK, 0.52));
+
+        // Contraste de texto: oscuro para colores claros (amarillo), blanco para el resto
+        double lum = 0.299 * base.getRed() + 0.587 * base.getGreen() + 0.114 * base.getBlue();
+        String textFill  = lum > 0.58 ? "rgba(18,28,40,0.92)" : "rgba(255,255,255,0.96)";
+        String textFillSel = "rgba(255,255,255,0.97)";
+
+        int r = (int)(base.getRed()   * 255);
+        int g = (int)(base.getGreen() * 255);
+        int b = (int)(base.getBlue()  * 255);
+
+        if (!selected) {
+            // Capa 1 (fondo): rim oscuro a tamaño completo
+            // Capa 2 (encima): gradiente principal con 4px inset inferior → queda el rim visible
+            // Capa 3 (encima): brillo blanco semitransparente solo en la mitad superior
+            return
+                "-fx-background-color: " + rimHex + "," +
+                    "linear-gradient(from 0% 0% to 0% 100%," + lightHex + "," + part.getHexColor() + " 55%," + darkHex + ")," +
+                    "linear-gradient(from 0% 0% to 0% 38%, rgba(255,255,255,0.22), transparent);" +
+                "-fx-background-insets: 0, 0 0 4 0, 0 0 4 0;" +
+                "-fx-background-radius: 12, 12, 12;" +
+                "-fx-text-fill: " + textFill + ";" +
+                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 7, 0, 0, 3);";
         } else {
-            String subtleTint = String.format("rgba(%d,%d,%d,0.06)", r, g, b);
-            btn.setStyle(
-                "-fx-border-color: rgba(255,255,255,0.03) transparent rgba(255,255,255,0.03) " + hex + ";" +
-                "-fx-border-width: 1 0 1 3;" +
-                "-fx-background-color: " + subtleTint + ";"
-            );
+            // Hundido: gradiente oscuro→base (sin brillo), inner-shadow, glow exterior
+            return
+                "-fx-background-color: " +
+                    "linear-gradient(from 0% 0% to 0% 100%," + darkHex + "," + part.getHexColor() + " 75%);" +
+                "-fx-background-insets: 0;" +
+                "-fx-background-radius: 12;" +
+                "-fx-border-color: rgba(255,255,255,0.42);" +
+                "-fx-border-width: 1.5;" +
+                "-fx-border-radius: 12;" +
+                "-fx-text-fill: " + textFillSel + ";" +
+                "-fx-effect: innershadow(gaussian, rgba(0,0,0,0.52), 6, 0, 0, 2)," +
+                    "dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.80), 22, 0.22, 0, 0);";
         }
+    }
+
+    /** Convierte un Color de JavaFX a cadena hexadecimal #RRGGBB. */
+    private static String toHex(Color c) {
+        return String.format("#%02X%02X%02X",
+            Math.min(255, (int)(c.getRed()   * 255)),
+            Math.min(255, (int)(c.getGreen() * 255)),
+            Math.min(255, (int)(c.getBlue()  * 255)));
     }
 
     @FXML private void handleMousePressed(MouseEvent e)  { beginStroke(e.getX(), e.getY()); }
     @FXML private void handleMouseDragged(MouseEvent e)  { continueStroke(e.getX(), e.getY()); }
     @FXML private void handleMouseReleased(MouseEvent e) { finishStroke(); }
+
+    @FXML
+    private void handleMouseMoved(MouseEvent e) {
+        if (btnErase.isSelected()) {
+            drawEraserPreview(e.getX(), e.getY());
+            canvas.setCursor(Cursor.NONE);
+        } else {
+            clearCursorOverlay();
+            canvas.setCursor(Cursor.CROSSHAIR);
+        }
+    }
+
+    @FXML
+    private void handleMouseExited(MouseEvent e) {
+        clearCursorOverlay();
+        canvas.setCursor(Cursor.DEFAULT);
+    }
 
     @FXML
     private void handleTouchPressed(TouchEvent e) {
@@ -479,6 +571,8 @@ public class DrawingController {
             double er = ERASER_RADIUS / currentScale;
             gc.setFill(Color.WHITE);
             gc.fillRect(x - er, y - er, er * 2, er * 2);
+            canvas.setCursor(Cursor.NONE);
+            drawEraserPreview(x, y);
         } else {
             gc.setStroke(Color.web(currentPart.getHexColor()));
             gc.setLineWidth(effectiveLineWidth);
@@ -486,6 +580,12 @@ public class DrawingController {
             gc.moveTo(lastX, lastY);
             gc.lineTo(lastX, lastY);
             gc.stroke();
+            canvas.setCursor(Cursor.CROSSHAIR);
+            // Ocultar pista cuando el usuario empieza a dibujar
+            if (!canvasHasContent) {
+                canvasHasContent = true;
+                updateCanvasHint();
+            }
         }
     }
 
@@ -494,6 +594,7 @@ public class DrawingController {
             double er = ERASER_RADIUS / currentScale;
             gc.setFill(Color.WHITE);
             gc.fillRect(x - er, y - er, er * 2, er * 2);
+            drawEraserPreview(x, y);
         } else {
             gc.lineTo(x, y);
             gc.stroke();
@@ -503,15 +604,29 @@ public class DrawingController {
 
     private void finishStroke() {
         if (!btnErase.isSelected()) { gc.stroke(); gc.closePath(); }
+        clearCursorOverlay();
         saveCurrentState();
     }
 
     @FXML
     private void handleClear() {
         redoStack.clear();
-        clearToWhite();
-        saveCurrentState();
+        canvasHasContent = false;
         statusLabel.setText(I18n.t("status.cleared"));
+        // Animación flash: parpadeo rápido antes de limpiar
+        FadeTransition flash = new FadeTransition(Duration.millis(80), canvasContainer);
+        flash.setFromValue(1.0);
+        flash.setToValue(0.08);
+        flash.setOnFinished(ev -> {
+            clearToWhite();
+            updateCanvasHint();
+            saveCurrentState();
+            FadeTransition restore = new FadeTransition(Duration.millis(120), canvasContainer);
+            restore.setFromValue(0.08);
+            restore.setToValue(1.0);
+            restore.play();
+        });
+        flash.play();
     }
 
     @FXML
@@ -521,6 +636,7 @@ public class DrawingController {
             clearToWhite();
             gc.drawImage(undoStack.peek(), 0, 0);
             statusLabel.setText(I18n.t("status.undo"));
+            updateUndoRedoButtons();
         }
     }
 
@@ -532,6 +648,7 @@ public class DrawingController {
             clearToWhite();
             gc.drawImage(next, 0, 0);
             statusLabel.setText(I18n.t("status.redo"));
+            updateUndoRedoButtons();
         }
     }
 
@@ -620,6 +737,14 @@ public class DrawingController {
             paletteContainer.getChildren().clear();
             setupPalette();
         }
+        // Actualizar pista del lienzo
+        if (canvasHintLabel != null) {
+            canvasHintLabel.setText(I18n.t("canvas.hint"));
+        }
+        // Actualizar placeholder de galería vacía
+        if (galleryEmptyLabel != null) {
+            galleryEmptyLabel.setText(I18n.t("gallery.emptyState"));
+        }
 
         // Update tutorial if it's already built
         if (tutorialOverlay != null) {
@@ -691,6 +816,7 @@ public class DrawingController {
         statusLabel.setText(I18n.t("status.analyzing"));
         setSearchProgress(true, 0.0, 0.0, 0, 1);
         galleryPane.getChildren().clear();
+        updateGalleryEmptyState(false);
 
         javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
@@ -708,7 +834,9 @@ public class DrawingController {
 
                 if (pose != null && !pose.getAllJoints().isEmpty()) {
                     List<String> terms = SearchTermGenerator.generateTerms(pose);
-                    final int partCount = pose.getAllJoints().size();
+                    // Cuenta semántica: cada lado bilateral (L/R) suma 1;
+                    // el centroide combinado no cuenta si ya hay splits detectados.
+                    final int partCount = countMeaningfulJoints(pose);
                     currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
                     Platform.runLater(() ->
                             statusLabel.setText(I18n.fmt("status.poseDetected", partCount))
@@ -736,6 +864,7 @@ public class DrawingController {
             setSearchProgress(false, -1);
 
             if (results.isEmpty()) {
+                updateGalleryEmptyState(true);
                 statusLabel.setText(buildEmptySearchMessage());
             } else {
                 double best = results.stream().mapToDouble(ImageResult::getScore).filter(s -> s >= 0).max().orElse(0);
@@ -830,8 +959,22 @@ public class DrawingController {
         applyGalleryResponsiveLayout();
         if (results == null || results.isEmpty()) return;
         int rank = 1;
+        int delayMs = 0;
         for (ImageResult result : results) {
-            galleryPane.getChildren().add(buildGalleryCard(result, rank++));
+            VBox card = buildGalleryCard(result, rank++);
+            card.setOpacity(0);
+            card.setTranslateY(14);
+            galleryPane.getChildren().add(card);
+            final int d = delayMs;
+            new Timeline(
+                new KeyFrame(Duration.millis(d),
+                    new KeyValue(card.opacityProperty(),    0),
+                    new KeyValue(card.translateYProperty(), 14)),
+                new KeyFrame(Duration.millis(d + 220),
+                    new KeyValue(card.opacityProperty(),    1,  Interpolator.EASE_OUT),
+                    new KeyValue(card.translateYProperty(), 0,  Interpolator.EASE_OUT))
+            ).play();
+            delayMs = Math.min(delayMs + 45, 480);
         }
         refreshGalleryCardsSize();
         logger.info("[GALLERY] {} resultados mostrados", results.size());
@@ -853,6 +996,21 @@ public class DrawingController {
         card.setCursor(Cursor.HAND);
         Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
         card.setOnMouseClicked(e -> openResultSource(result));
+
+        // Animación hover: levantar la card y volver a su lugar
+        card.setOnMouseEntered(e -> {
+            card.setViewOrder(-1); // renderizar sobre las demás
+            new Timeline(new KeyFrame(Duration.millis(110),
+                new KeyValue(card.translateYProperty(), -5, Interpolator.EASE_OUT)
+            )).play();
+        });
+        card.setOnMouseExited(e -> {
+            Timeline drop = new Timeline(new KeyFrame(Duration.millis(110),
+                new KeyValue(card.translateYProperty(), 0, Interpolator.EASE_OUT)
+            ));
+            drop.setOnFinished(ev -> card.setViewOrder(0));
+            drop.play();
+        });
         return card;
     }
 
@@ -883,7 +1041,7 @@ public class DrawingController {
         if (result.getScore() <= 0.0) {
             String title = result.getTitle() == null || result.getTitle().isBlank() ? "Ref" : result.getTitle();
             Label label = new Label(String.format("#%d · %s", rank, title));
-            label.setStyle("-fx-font-size: 11px; -fx-text-fill: #8880b0;");
+            label.setStyle("-fx-font-size: 11px; -fx-text-fill: #7A9AA8;");
             return label;
         }
         double pct = result.getScore() * 100;
@@ -893,9 +1051,18 @@ public class DrawingController {
     }
 
     private static String buildScoreLabelStyle(double pct) {
-        String colorPart = pct >= 60
-                ? "rgba(104,211,145,0.18); -fx-text-fill: #68d391;"
-                : "rgba(252,129,129,0.18); -fx-text-fill: #fc8181;";
+        // 3 niveles alineados con la paleta del proyecto
+        String colorPart;
+        if (pct >= 70) {
+            // Alto: Sage teal  (#5A8A7C)
+            colorPart = "rgba(90,138,124,0.22); -fx-text-fill: #7DC9B0;";
+        } else if (pct >= 60) {
+            // Medio: Amber (#D4A064)
+            colorPart = "rgba(212,160,100,0.22); -fx-text-fill: #D4A064;";
+        } else {
+            // Bajo: Copper (#C17B5E)
+            colorPart = "rgba(193,123,94,0.22); -fx-text-fill: #C17B5E;";
+        }
         return "-fx-font-size: 12px; -fx-font-weight: bold; -fx-padding: 3 8 3 8;" +
                "-fx-background-radius: 8; -fx-background-color: " + colorPart;
     }
@@ -935,5 +1102,129 @@ public class DrawingController {
         } catch (Exception e) {
             logger.error("No se pudo abrir: {}", target, e);
         }
+    }
+
+    // ── Interactividad ────────────────────────────────────────────────────────
+
+    /**
+     * Crea el canvas overlay transparente que se usa para dibujar la
+     * previsualización del borrador (círculo que sigue al cursor).
+     */
+    private void setupCursorOverlay() {
+        if (canvasContainer == null || canvas == null) return;
+        cursorOverlay = new Canvas(canvas.getWidth(), canvas.getHeight());
+        cursorOverlay.setMouseTransparent(true);
+        cursorOverlay.widthProperty().bind(canvas.widthProperty());
+        cursorOverlay.heightProperty().bind(canvas.heightProperty());
+        canvasContainer.getChildren().add(cursorOverlay);
+    }
+
+    /**
+     * Crea la etiqueta de pista que aparece en el centro del lienzo vacío
+     * ("Elige una parte y dibuja la pose aquí").
+     * Se añade encima del canvas como overlay no interactivo.
+     */
+    private void setupCanvasHint() {
+        if (canvasContainer == null) return;
+        canvasHintLabel = new Label(I18n.t("canvas.hint"));
+        canvasHintLabel.getStyleClass().add("canvas-hint-label");
+        canvasHintLabel.setMouseTransparent(true);
+        canvasHintLabel.setWrapText(true);
+        canvasHintLabel.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        canvasHintLabel.setAlignment(javafx.geometry.Pos.CENTER);
+        canvasHintLabel.setMaxWidth(Double.MAX_VALUE);
+        canvasContainer.getChildren().add(canvasHintLabel);
+    }
+
+    /**
+     * Dibuja un círculo translúcido sobre el overlay mostrando el área
+     * que borrará el borrador en la posición (x, y) del canvas.
+     */
+    private void drawEraserPreview(double x, double y) {
+        if (cursorOverlay == null) return;
+        GraphicsContext ogc = cursorOverlay.getGraphicsContext2D();
+        ogc.clearRect(0, 0, cursorOverlay.getWidth(), cursorOverlay.getHeight());
+        double er = ERASER_RADIUS / currentScale;
+        // Relleno muy transparente
+        ogc.setFill(Color.rgb(132, 84, 96, 0.10));
+        ogc.fillOval(x - er, y - er, er * 2, er * 2);
+        // Borde nítido mauve
+        ogc.setStroke(Color.web("#845460"));
+        ogc.setLineWidth(1.5 / currentScale);
+        ogc.strokeOval(x - er, y - er, er * 2, er * 2);
+        // Cruz central pequeña
+        double cs = 4 / currentScale;
+        ogc.setStroke(Color.rgb(132, 84, 96, 0.60));
+        ogc.setLineWidth(1.0 / currentScale);
+        ogc.strokeLine(x - cs, y, x + cs, y);
+        ogc.strokeLine(x, y - cs, x, y + cs);
+    }
+
+    /** Limpia el overlay del cursor (borra el círculo del borrador). */
+    private void clearCursorOverlay() {
+        if (cursorOverlay == null) return;
+        cursorOverlay.getGraphicsContext2D()
+                     .clearRect(0, 0, cursorOverlay.getWidth(), cursorOverlay.getHeight());
+    }
+
+    /** Muestra u oculta la pista del lienzo vacío según {@code canvasHasContent}. */
+    private void updateCanvasHint() {
+        if (canvasHintLabel == null) return;
+        canvasHintLabel.setVisible(!canvasHasContent);
+        canvasHintLabel.setManaged(!canvasHasContent);
+    }
+
+    /** Habilita/deshabilita los botones Deshacer y Rehacer según el estado de las pilas. */
+    private void updateUndoRedoButtons() {
+        if (btnUndo != null) btnUndo.setDisable(undoStack.size() <= 1);
+        if (btnRedo != null) btnRedo.setDisable(redoStack.isEmpty());
+    }
+
+    /**
+     * Muestra u oculta el placeholder de la galería vacía.
+     * Se muestra al arrancar y cuando no hay resultados; se oculta cuando hay
+     * imágenes en la galería o cuando empieza una búsqueda.
+     */
+    private void updateGalleryEmptyState(boolean empty) {
+        if (galleryEmptyState == null) return;
+        galleryEmptyState.setVisible(empty);
+    }
+
+    /**
+     * Cuenta las partes corporales de forma semántica:
+     * <ul>
+     *   <li>Las variantes bilaterales ({@code LEFT_ARM}, {@code RIGHT_ARM}, …) cuentan
+     *       cada una como 1.</li>
+     *   <li>El centroide combinado ({@code ARMS}) <em>no</em> se cuenta si ya existen
+     *       splits bilaterales detectados para esa misma parte.</li>
+     *   <li>Las partes no bilaterales ({@code HEAD}, {@code TORSO}) cuentan como 1 si
+     *       están presentes en la pose.</li>
+     * </ul>
+     * Ejemplo: HEAD + LEFT_ARM + RIGHT_ARM + LEFT_FOREARM + RIGHT_FOREARM +
+     * LEFT_HAND + RIGHT_HAND → 7 (el centroide combinado ARMS/FOREARMS/HANDS
+     * no se suma porque sus splits ya cuentan).
+     */
+    private static int countMeaningfulJoints(PoseData pose) {
+        java.util.Set<AnatomyPart> joints = pose.getAllJoints().keySet();
+        int count = 0;
+        for (AnatomyPart part : AnatomyPart.values()) {
+            if (!part.isPaletteItem()) {
+                // Split bilateral (LEFT_ARM, RIGHT_ARM, etc.): cuenta como parte propia
+                if (joints.contains(part)) count++;
+            } else {
+                AnatomyPart leftVar = part.leftVariant();
+                if (leftVar == null) {
+                    // No bilateral (HEAD, TORSO): cuenta 1 si está presente
+                    if (joints.contains(part)) count++;
+                } else {
+                    // Parte bilateral: el centroide combinado solo cuenta si NO hay splits
+                    AnatomyPart rightVar = part.rightVariant();
+                    boolean hasSplits = joints.contains(leftVar) || joints.contains(rightVar);
+                    if (!hasSplits && joints.contains(part)) count++;
+                    // Los splits se contabilizan en la rama !isPaletteItem() de arriba
+                }
+            }
+        }
+        return count;
     }
 }

@@ -1,189 +1,306 @@
 /* ═══════════════════════════════════════════════════════════
-   BUSCA REFERENCIAS  ·  Tema artístico oscuro
+   BUSCA REFERENCIAS  ·  Tema artístico cálido-oscuro
+   ─────────────────────────────────────────────────────────
+   Paleta base:
+     Mauve      #845460  →  acento principal, seleccionados
+     Peach      #EAD3CB  →  texto claro, iconos activos
+     Steel Blue #BDC7C9  →  texto secundario, bordes suaves
+     Dark Teal  #2B4F60  →  superficies, fondos, headers
+
+   Complementarios nuevos:
+     Copper     #C17B5E  →  acento cálido secundario, score medio
+     Amber      #D4A064  →  warmth highlight, score medio-alto
+     Sage       #5A8A7C  →  éxito, score alto
+     Faded Steel#6B8FA3  →  hover mid-tones, iconos sutiles
+     Cream      #FAF8F6  →  fondo del lienzo
+
+   Derivados oscuros (fondos):
+     #0D1B26  fondo raíz (más profundo)
+     #12263A  fondo canvas / gallery
+     #1A3245  superficie base
+     #1C3A50  superficie elevada
+     #243D52  superficie más alta
    ═══════════════════════════════════════════════════════════ */
 
+/* ── Reset base ──────────────────────────────────────────── */
+
 .root {
-    -fx-accent: #a78bfa;
+    -fx-accent: #845460;
     -fx-font-size: 13px;
-    -fx-base: #1f1c2e;
-    -fx-control-inner-background: #1f1c2e;
-    -fx-text-background-color: #ede9ff;
-    -fx-background-color: #13111d;
+    -fx-base: #1C3A50;
+    -fx-control-inner-background: #1C3A50;
+    -fx-text-background-color: #EAD3CB;
+    -fx-background-color: #0D1B26;
+}
+
+/* ── Marca / Brand mark ──────────────────────────────────── */
+
+.brand-mark {
+    -fx-text-fill: #845460;
+    -fx-font-size: 18px;
+    -fx-padding: 0 4 0 4;
+    -fx-effect: dropshadow(gaussian, rgba(132,84,96,0.55), 8, 0, 0, 0);
 }
 
 /* ── Toolbar ─────────────────────────────────────────────── */
 
 .toolbar-scroll,
 .toolbar-scroll > .viewport {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #1e1838, #161228);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #1C3A50, #12263A);
     -fx-background-insets: 0;
 }
 
 .tool-bar {
-    -fx-spacing: 8;
+    -fx-spacing: 7;
     -fx-padding: 9 16 9 16;
     -fx-background-color: transparent;
-    -fx-border-color: transparent transparent #42367a transparent;
+    -fx-border-color: transparent transparent rgba(132,84,96,0.35) transparent;
     -fx-border-width: 0 0 2 0;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 10, 0, 0, 5);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.60), 12, 0, 0, 5);
 }
 
 .tool-bar .button,
 .tool-bar .toggle-button {
-    -fx-padding: 8 16 8 16;
-    -fx-font-size: 14px;
+    -fx-padding: 8 15 8 15;
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
-    -fx-background-radius: 9;
-    -fx-border-radius: 9;
-    -fx-text-fill: #ccc6e8;
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #2e2848, #231e38);
-    -fx-border-color: #3e3860;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-text-fill: #BDC7C9;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #243D52, #1C3A50);
+    -fx-border-color: rgba(43,79,96,0.80);
     -fx-border-width: 1;
-    -fx-min-height: 40;
+    -fx-min-height: 38;
+    -fx-cursor: hand;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);
 }
 
 .tool-bar .button:hover,
 .tool-bar .toggle-button:hover {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3e3460, #2e2850);
-    -fx-text-fill: #f0ecff;
-    -fx-border-color: #5a4e90;
-    -fx-effect: dropshadow(gaussian, rgba(100,80,200,0.35), 8, 0, 0, 1);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #2E5570, #243D52);
+    -fx-text-fill: #EAD3CB;
+    -fx-border-color: rgba(107,143,163,0.65);
+    -fx-effect:
+        dropshadow(gaussian, rgba(107,143,163,0.45), 10, 0, 0, 2),
+        dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
+}
+
+.tool-bar .button:pressed,
+.tool-bar .toggle-button:pressed {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #1C3A50, #12263A);
+    -fx-text-fill: #EAD3CB;
+    -fx-border-color: #2B4F60;
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.55), 6, 0, 0, 2);
+    -fx-translate-y: 1;
 }
 
 .tool-bar .toggle-button:selected {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #7048d0, #5030a8);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #9e6472, #845460);
     -fx-text-fill: #ffffff;
-    -fx-border-color: #d0aeff;
-    -fx-border-width: 2;
+    -fx-border-color: rgba(234,211,203,0.70);
+    -fx-border-width: 1.5;
     -fx-effect:
-        dropshadow(gaussian, rgba(130,80,255,0.75), 24, 0.08, 0, 0),
-        innershadow(gaussian, rgba(220,190,255,0.28), 5, 0, 0, 1);
+        dropshadow(gaussian, rgba(132,84,96,0.80), 28, 0.10, 0, 0),
+        innershadow(gaussian, rgba(234,211,203,0.20), 4, 0, 0, 1);
+}
+
+.tool-bar .toggle-button:selected:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #b88090, #9e6472);
+    -fx-effect:
+        dropshadow(gaussian, rgba(132,84,96,0.90), 32, 0.12, 0, 0),
+        innershadow(gaussian, rgba(234,211,203,0.20), 4, 0, 0, 1);
+}
+
+.tool-bar .button:disabled,
+.tool-bar .toggle-button:disabled {
+    -fx-opacity: 0.35;
+    -fx-cursor: default;
 }
 
 .tool-bar .separator .line {
-    -fx-border-color: #352e60;
+    -fx-border-color: rgba(43,79,96,0.70);
     -fx-border-width: 0 1 0 0;
 }
 
 /* ── Botón principal: Buscar ─────────────────────────────── */
 
 .search-button-large {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3ebc70, #229a48);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #9e6472, #845460);
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
-    -fx-font-size: 14px;
+    -fx-font-size: 13px;
     -fx-padding: 8 22 8 22;
-    -fx-background-radius: 9;
+    -fx-background-radius: 10;
     -fx-border-width: 0;
-    -fx-min-height: 40;
+    -fx-min-height: 38;
+    -fx-cursor: hand;
     -fx-effect:
-        dropshadow(gaussian, rgba(52,200,100,0.60), 16, 0.12, 0, 2),
+        dropshadow(gaussian, rgba(132,84,96,0.70), 18, 0.14, 0, 2),
         dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .search-button-large:hover {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3ec46e, #34a860);
-    -fx-effect: dropshadow(gaussian, rgba(52,168,96,0.70), 14, 0.15, 0, 3);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #c07088, #9e6472);
+    -fx-effect:
+        dropshadow(gaussian, rgba(158,100,114,0.90), 24, 0.16, 0, 3),
+        dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .search-button-large:pressed {
-    -fx-background-color: #1a6035;
-    -fx-effect: none;
+    -fx-background-color: #5a3442;
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.55), 6, 0, 0, 2);
+    -fx-translate-y: 1;
 }
 
 /* ── Botón Añadir fotos ──────────────────────────────────── */
 
 .add-photos-button {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #b898ff, #8060e8);
-    -fx-text-fill: #ffffff;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #3D6878, #2B4F60);
+    -fx-text-fill: #EAD3CB;
     -fx-font-weight: bold;
-    -fx-font-size: 14px;
+    -fx-font-size: 13px;
     -fx-padding: 8 18 8 18;
-    -fx-background-radius: 9;
+    -fx-background-radius: 10;
     -fx-border-width: 0;
-    -fx-min-height: 40;
+    -fx-min-height: 38;
+    -fx-cursor: hand;
     -fx-effect:
-        dropshadow(gaussian, rgba(180,140,255,0.60), 16, 0.12, 0, 2),
+        dropshadow(gaussian, rgba(61,104,120,0.65), 16, 0.12, 0, 2),
         dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .add-photos-button:hover {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #bea7ff, #a78bfa);
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.70), 14, 0.15, 0, 3);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #507E90, #3D6878);
+    -fx-effect:
+        dropshadow(gaussian, rgba(80,126,144,0.85), 20, 0.15, 0, 3),
+        dropshadow(gaussian, rgba(0,0,0,0.30), 4, 0, 0, 1);
 }
 
 .add-photos-button:pressed {
-    -fx-background-color: #5a3eae;
-    -fx-effect: none;
+    -fx-background-color: #1e3444;
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.50), 6, 0, 0, 2);
+    -fx-translate-y: 1;
+}
+
+/* ── Botón de ayuda / tutorial / idioma ──────────────────── */
+
+.help-button {
+    -fx-background-color: rgba(43,79,96,0.28);
+    -fx-text-fill: #6B8FA3;
+    -fx-font-size: 15px;
+    -fx-padding: 6 11 6 11;
+    -fx-background-radius: 10;
+    -fx-border-radius: 10;
+    -fx-border-color: rgba(43,79,96,0.60);
+    -fx-border-width: 1;
+    -fx-min-height: 38;
+    -fx-cursor: hand;
+}
+
+.help-button:hover {
+    -fx-background-color: rgba(132,84,96,0.22);
+    -fx-text-fill: #EAD3CB;
+    -fx-border-color: rgba(132,84,96,0.55);
+    -fx-effect: dropshadow(gaussian, rgba(132,84,96,0.40), 12, 0, 0, 0);
+}
+
+.help-button:pressed {
+    -fx-background-color: rgba(132,84,96,0.35);
+    -fx-translate-y: 1;
 }
 
 /* ── Área de trabajo / Canvas ────────────────────────────── */
 
 .canvas-root {
-    -fx-background-color: radial-gradient(center 50% 50%, radius 80%, #131028, #0a0812);
-    -fx-padding: 10;
+    -fx-background-color: radial-gradient(center 50% 42%, radius 85%,
+        #1A3245, #0D1B26);
+    -fx-padding: 12;
 }
 
 .canvas-container {
     -fx-border-color:
         rgba(0,0,0,0.96),
-        rgba(200,185,255,0.72);
+        rgba(107,143,163,0.45);
     -fx-border-width: 3, 1;
     -fx-border-insets: 0, 3;
-    -fx-background-radius: 6;
-    -fx-border-radius: 6;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
     -fx-effect:
-        dropshadow(gaussian, rgba(120,90,240,0.18), 40, 0.05, 0, 0),
-        dropshadow(gaussian, rgba(0,0,0,0.92), 60, 0.15, 0, 22);
+        dropshadow(gaussian, rgba(132,84,96,0.15), 45, 0.05, 0, 0),
+        dropshadow(gaussian, rgba(0,0,0,0.95), 70, 0.18, 0, 24);
+}
+
+/* Pista de canvas vacío */
+.canvas-hint-label {
+    -fx-font-size: 19px;
+    -fx-font-style: italic;
+    -fx-text-fill: rgba(107,143,163,0.32);
+    -fx-wrap-text: true;
+    -fx-text-alignment: center;
+    -fx-alignment: center;
+    -fx-max-width: 380;
+    -fx-padding: 0 20 90 20;
+    -fx-pointer-events: none;
 }
 
 /* ── Paleta lateral ──────────────────────────────────────── */
 
 .side-palette {
-    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #191632, #13112a);
-    -fx-border-color: transparent #3a3270 transparent transparent;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%,
+        #1C3A50 0%, #17304A 60%, #12263A 100%);
+    -fx-border-color: transparent rgba(132,84,96,0.30) transparent transparent;
     -fx-border-width: 0 2 0 0;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 12, 0, 6, 0);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.50), 14, 0, 7, 0);
 }
 
+/* ── Títulos de sección ──────────────────────────────────── */
+
 .section-title {
-    -fx-font-size: 11px;
+    -fx-font-size: 10px;
     -fx-font-weight: bold;
-    -fx-text-fill: #8878c8;
-    -fx-padding: 4 0 10 2;
-    -fx-border-color: transparent transparent #2e2858 transparent;
-    -fx-border-width: 0 0 1 0;
+    -fx-text-fill: #6B8FA3;
+    -fx-padding: 4 0 8 10;
+    -fx-border-color: #845460 transparent rgba(43,79,96,0.50) transparent;
+    -fx-border-width: 0 0 1 3;
+    -fx-letter-spacing: 1;
+}
+
+/* Título de galería con acento cobre */
+.gallery-section-title {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #6B8FA3;
+    -fx-padding: 4 0 8 10;
+    -fx-border-color: #C17B5E transparent rgba(43,79,96,0.50) transparent;
+    -fx-border-width: 0 0 1 3;
+    -fx-letter-spacing: 1;
 }
 
 .palette-container {
-    -fx-padding: 4 3 6 3;
-}
-
-.palette-button {
+    -fx-padding: 6 6 10 6;
     -fx-background-color: transparent;
-    -fx-text-fill: #cdc8e8;
-    -fx-font-size: 14px;
+}
+
+/* ── Botón pastilla de paleta ─────────────────────────────── */
+/* El gradiente, text-fill y sombra los aplica Java con inline
+   style porque cada parte tiene un color diferente.
+   Aquí solo definimos la geometría y cursor base.            */
+
+.palette-pill-button {
+    -fx-font-size: 13px;
     -fx-font-weight: bold;
-    -fx-background-radius: 8;
-    -fx-border-radius: 8;
-    -fx-border-color: transparent;
-    -fx-border-width: 1;
-    -fx-pref-width: 200;
-    -fx-min-height: 46;
-    -fx-alignment: CENTER_LEFT;
-    -fx-padding: 3 8 3 5;
+    -fx-min-height: 42;
+    -fx-pref-height: 42;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-cursor: hand;
+    -fx-alignment: center;
+    -fx-padding: 0 16 0 16;
 }
 
-.palette-button:hover {
-    -fx-background-color: rgba(55,44,98,0.65);
-    -fx-text-fill: #e8e4f8;
-    -fx-border-color: #3a3270;
-}
-
-/* Seleccionado: fondo y borde de color los aplica Java por parte anatómica */
-.palette-button:selected {
-    -fx-text-fill: #ffffff;
+/* Bajada mínima al pulsar para reforzar sensación táctil */
+.palette-pill-button:pressed {
+    -fx-translate-y: 2;
 }
 
 /* ── ScrollPane genérico ─────────────────────────────────── */
@@ -197,60 +314,141 @@
     -fx-background-color: transparent;
 }
 
+/* ── Scrollbars ──────────────────────────────────────────── */
+
+.scroll-bar {
+    -fx-background-color: transparent;
+    -fx-background-radius: 4;
+}
+
+.scroll-bar .track {
+    -fx-background-color: rgba(13,27,38,0.50);
+    -fx-background-radius: 4;
+    -fx-background-insets: 2;
+}
+
+.scroll-bar .thumb {
+    -fx-background-color: rgba(43,79,96,0.55);
+    -fx-background-radius: 4;
+    -fx-background-insets: 2;
+}
+
+.scroll-bar .thumb:hover {
+    -fx-background-color: rgba(132,84,96,0.55);
+}
+
+.scroll-bar .thumb:pressed {
+    -fx-background-color: rgba(132,84,96,0.75);
+}
+
+.scroll-bar .increment-button,
+.scroll-bar .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 2;
+}
+
+.scroll-bar .increment-arrow,
+.scroll-bar .decrement-arrow {
+    -fx-background-color: rgba(107,143,163,0.45);
+    -fx-shape: " ";
+    -fx-padding: 0.08em 0.3em;
+}
+
 /* ── Galería ─────────────────────────────────────────────── */
 
 .gallery-root {
-    -fx-padding: 4 8 6 8;
-    -fx-background-color: #13111d;
+    -fx-padding: 5 8 6 8;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%,
+        #0D1B26, #0A1720);
+    -fx-border-color: rgba(43,79,96,0.40) transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
 }
 
 .gallery-pane {
-    -fx-padding: 4;
+    -fx-padding: 6;
     -fx-background-color: transparent;
 }
 
+/* ── Estado vacío de galería ─────────────────────────────── */
+
+.gallery-empty-state {
+    -fx-background-color: transparent;
+    -fx-alignment: CENTER;
+    -fx-padding: 0 20 48 20;
+}
+
+.gallery-empty-icon {
+    -fx-font-size: 42px;
+    -fx-text-fill: rgba(90,138,124,0.38);
+    -fx-padding: 0 0 6 0;
+    -fx-effect: dropshadow(gaussian, rgba(90,138,124,0.30), 12, 0, 0, 0);
+}
+
+.gallery-empty-text {
+    -fx-font-size: 14px;
+    -fx-font-style: italic;
+    -fx-text-fill: rgba(107,143,163,0.50);
+    -fx-text-alignment: center;
+    -fx-alignment: center;
+    -fx-wrap-text: true;
+    -fx-max-width: 420;
+    -fx-line-spacing: 3;
+}
+
+/* ── Cards de imagen ─────────────────────────────────────── */
+
 .image-card {
     -fx-padding: 6;
-    -fx-border-color: #2a2448;
+    -fx-border-color: rgba(43,79,96,0.70);
     -fx-border-width: 1;
     -fx-border-radius: 12;
     -fx-background-radius: 12;
-    -fx-background-color:
-        linear-gradient(from 0% 0% to 0% 100%, #26213e, #191629),
-        #191629;
-    -fx-background-insets: 0, 1;
-    -fx-background-radius: 12, 11;
-    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.65), 16, 0, 0, 6);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%,
+        #1C3A50, #152D40);
+    -fx-background-insets: 0;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.65), 14, 0, 0, 5);
 }
 
 .image-card:hover {
-    -fx-border-color: #b89eff;
-    -fx-background-color:
-        linear-gradient(from 0% 0% to 0% 100%, #2e2850, #231f3c),
-        #231f3c;
-    -fx-background-insets: 0, 1;
+    -fx-border-color: rgba(193,123,94,0.75);
+    -fx-border-width: 1.5;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%,
+        #243D52, #1C3A50);
     -fx-effect:
-        dropshadow(gaussian, rgba(167,139,250,0.55), 22, 0.08, 0, 0),
+        dropshadow(gaussian, rgba(193,123,94,0.55), 26, 0.10, 0, 0),
         dropshadow(gaussian, rgba(0,0,0,0.70), 12, 0, 0, 4);
 }
 
-.gallery-rank {
-    -fx-background-color: rgba(8, 6, 18, 0.88);
-    -fx-text-fill: #a09aca;
-    -fx-font-size: 10px;
-    -fx-font-weight: bold;
-    -fx-padding: 3 7 3 7;
-    -fx-background-radius: 6;
+.image-card:pressed {
+    -fx-effect:
+        dropshadow(gaussian, rgba(193,123,94,0.35), 12, 0.08, 0, 0),
+        innershadow(gaussian, rgba(0,0,0,0.40), 5, 0, 0, 2);
 }
 
-/* Score pill set via inline style in Java — these affect label containers */
+.gallery-rank {
+    -fx-background-color: rgba(10,23,32,0.88);
+    -fx-text-fill: #6B8FA3;
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-padding: 3 6 3 6;
+    -fx-background-radius: 5;
+}
+
+/* ── Score labels (3 niveles, paleta propia) ─────────────── */
+
 .score-high {
-    -fx-text-fill: #68d391;
+    -fx-text-fill: #7DC9B0;
+    -fx-font-weight: bold;
+}
+
+.score-mid {
+    -fx-text-fill: #D4A064;
     -fx-font-weight: bold;
 }
 
 .score-low {
-    -fx-text-fill: #fc8181;
+    -fx-text-fill: #C17B5E;
     -fx-font-weight: bold;
 }
 
@@ -259,8 +457,8 @@
 .status-bar {
     -fx-spacing: 4;
     -fx-padding: 7 14 8 14;
-    -fx-background-color: #171526;
-    -fx-border-color: #28234a transparent transparent transparent;
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #12263A, #0D1B26);
+    -fx-border-color: rgba(43,79,96,0.55) transparent transparent transparent;
     -fx-border-width: 1 0 0 0;
 }
 
@@ -270,21 +468,22 @@
 }
 
 .status-prefix {
-    -fx-text-fill: #3e3860;
+    -fx-text-fill: rgba(132,84,96,0.80);
     -fx-font-size: 10px;
+    -fx-font-weight: bold;
 }
 
 #statusLabel {
-    -fx-text-fill: #b8b2d8;
+    -fx-text-fill: #BDC7C9;
     -fx-font-size: 12px;
 }
 
 .batch-info-label {
-    -fx-text-fill: #a78bfa;
+    -fx-text-fill: #D4A064;
     -fx-font-size: 11px;
     -fx-font-weight: bold;
     -fx-padding: 2 7 2 7;
-    -fx-background-color: rgba(167,139,250,0.12);
+    -fx-background-color: rgba(212,160,100,0.14);
     -fx-background-radius: 10;
 }
 
@@ -293,27 +492,27 @@
 }
 
 .progress-row-label {
-    -fx-text-fill: #5c5480;
+    -fx-text-fill: #5A8A7C;
     -fx-font-size: 10px;
     -fx-font-weight: bold;
 }
 
 /* ── Barras de progreso ──────────────────────────────────── */
 
-/* Total bar */
 .progress-bar {
     -fx-min-height: 20;
     -fx-pref-height: 20;
 }
 
 .progress-bar > .bar {
-    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #7c5ce8, #a78bfa, #c4b0ff);
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%,
+        #845460, #9e6472, #C17B5E);
     -fx-background-radius: 5;
     -fx-background-insets: 1;
 }
 
 .progress-bar > .track {
-    -fx-background-color: #1e1a30;
+    -fx-background-color: #1C3A50;
     -fx-background-radius: 5;
     -fx-background-insets: 0;
 }
@@ -325,26 +524,26 @@
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.80), 4, 0, 0, 0);
 }
 
-/* Batch bar (thin, cooler purple) */
 .batch-progress-bar {
-    -fx-min-height: 11;
-    -fx-pref-height: 11;
+    -fx-min-height: 10;
+    -fx-pref-height: 10;
 }
 
 .batch-progress-bar > .bar {
-    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%, #4a3896, #7c5ce8);
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%,
+        #2B4F60, #5A8A7C);
     -fx-background-radius: 3;
     -fx-background-insets: 1;
 }
 
 .batch-progress-bar > .track {
-    -fx-background-color: #1a1630;
+    -fx-background-color: #12263A;
     -fx-background-radius: 3;
     -fx-background-insets: 0;
 }
 
 .progress-pct-small {
-    -fx-text-fill: rgba(220,210,255,0.90);
+    -fx-text-fill: rgba(234,211,203,0.90);
     -fx-font-size: 9px;
     -fx-font-weight: bold;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.70), 3, 0, 0, 0);
@@ -353,30 +552,38 @@
 /* ── Divisores del SplitPane ─────────────────────────────── */
 
 .split-pane > .split-pane-divider {
-    -fx-background-color: #28234a;
-    -fx-padding: 0 2 0 2;
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%,
+        rgba(43,79,96,0.30), rgba(132,84,96,0.30), rgba(43,79,96,0.30));
+    -fx-padding: 0 3 0 3;
+    -fx-cursor: v-resize;
+}
+
+.split-pane > .split-pane-divider:hover {
+    -fx-background-color: linear-gradient(from 0% 0% to 100% 0%,
+        rgba(132,84,96,0.50), rgba(193,123,94,0.50), rgba(132,84,96,0.50));
 }
 
 .split-pane {
-    -fx-background-color: #13111d;
+    -fx-background-color: #0D1B26;
 }
 
 /* ── Modos responsivos ───────────────────────────────────── */
 
 .compact-mode .tool-bar .button,
 .compact-mode .tool-bar .toggle-button {
-    -fx-font-size: 13px;
+    -fx-font-size: 12px;
     -fx-padding: 6 10 6 10;
-    -fx-min-height: 34;
+    -fx-min-height: 32;
 }
 
-.compact-mode .palette-button {
-    -fx-pref-width: 162;
-    -fx-min-height: 40;
+.compact-mode .palette-pill-button {
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 12px;
 }
 
-.compact-mode .section-title {
+.compact-mode .section-title,
+.compact-mode .gallery-section-title {
     -fx-font-size: 10px;
 }
 
@@ -388,9 +595,9 @@
     -fx-padding: 8;
 }
 
-.phone-mode .palette-button {
-    -fx-pref-width: 124;
-    -fx-min-height: 36;
+.phone-mode .palette-pill-button {
+    -fx-min-height: 34;
+    -fx-pref-height: 34;
     -fx-font-size: 11px;
 }
 
@@ -399,49 +606,26 @@
     -fx-min-height: 48;
 }
 
-.large-mode .palette-button {
-    -fx-pref-width: 216;
+.large-mode .palette-pill-button {
     -fx-min-height: 48;
+    -fx-pref-height: 48;
 }
 
 .large-mode .canvas-root {
-    -fx-padding: 12;
-}
-
-/* ── Botón de ayuda / tutorial ───────────────────────────── */
-
-.help-button {
-    -fx-background-color: rgba(80,60,140,0.25);
-    -fx-text-fill: #9080c8;
-    -fx-font-size: 16px;
-    -fx-padding: 6 11 6 11;
-    -fx-background-radius: 9;
-    -fx-border-radius: 9;
-    -fx-border-color: #3e3870;
-    -fx-border-width: 1;
-    -fx-min-height: 40;
-}
-
-.help-button:hover {
-    -fx-background-color: rgba(140,100,255,0.25);
-    -fx-text-fill: #c8a8ff;
-    -fx-border-color: rgba(167,139,250,0.55);
-    -fx-effect: dropshadow(gaussian, rgba(140,100,255,0.40), 10, 0, 0, 0);
+    -fx-padding: 14;
 }
 
 /* ═══════════════════════════════════════════════════════════
    TUTORIAL OVERLAY
    ═══════════════════════════════════════════════════════════ */
 
-/* ── Tarjeta del tutorial ────────────────────────────────── */
-
 .tutorial-card {
     -fx-background-color:
-        linear-gradient(from 0% 0% to 100% 100%, #1e1540, #120c26);
+        linear-gradient(from 0% 0% to 100% 100%, #1C3A50, #0D1B26);
     -fx-background-radius: 22;
     -fx-border-color:
-        rgba(167,139,250,0.70),
-        rgba(167,139,250,0.15);
+        rgba(132,84,96,0.70),
+        rgba(132,84,96,0.16);
     -fx-border-width: 1.5, 6;
     -fx-border-insets: 0, -4;
     -fx-border-radius: 22, 26;
@@ -449,8 +633,8 @@
     -fx-spacing: 10;
     -fx-alignment: CENTER;
     -fx-effect:
-        dropshadow(gaussian, rgba(120,90,240,0.55), 50, 0.10, 0, 0),
-        dropshadow(gaussian, rgba(0,0,0,0.95), 45, 0, 0, 14);
+        dropshadow(gaussian, rgba(132,84,96,0.45), 55, 0.10, 0, 0),
+        dropshadow(gaussian, rgba(0,0,0,0.96), 48, 0, 0, 16);
 }
 
 .tutorial-icon {
@@ -463,7 +647,7 @@
 .tutorial-title {
     -fx-font-size: 20px;
     -fx-font-weight: bold;
-    -fx-text-fill: #ede8ff;
+    -fx-text-fill: #EAD3CB;
     -fx-wrap-text: true;
     -fx-text-alignment: CENTER;
     -fx-alignment: CENTER;
@@ -471,7 +655,7 @@
 
 .tutorial-body {
     -fx-font-size: 13px;
-    -fx-text-fill: #9b90c4;
+    -fx-text-fill: #6B8FA3;
     -fx-wrap-text: true;
     -fx-text-alignment: CENTER;
     -fx-alignment: CENTER;
@@ -479,58 +663,82 @@
     -fx-padding: 0 4 4 4;
 }
 
-/* ── Botones dentro del tutorial ─────────────────────────── */
-
 .tutorial-next-btn {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #a78bfa, #7c5ce8);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #9e6472, #845460);
     -fx-text-fill: #ffffff;
     -fx-font-weight: bold;
     -fx-font-size: 13px;
     -fx-padding: 9 20 9 20;
-    -fx-background-radius: 9;
+    -fx-background-radius: 10;
     -fx-border-width: 0;
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.50), 12, 0.10, 0, 2);
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(132,84,96,0.55), 12, 0.10, 0, 2);
 }
 
 .tutorial-next-btn:hover {
-    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #bea7ff, #a78bfa);
-    -fx-effect: dropshadow(gaussian, rgba(167,139,250,0.75), 16, 0.12, 0, 3);
+    -fx-background-color: linear-gradient(from 0% 0% to 0% 100%, #c07088, #9e6472);
+    -fx-effect: dropshadow(gaussian, rgba(132,84,96,0.80), 18, 0.12, 0, 3);
 }
 
 .tutorial-next-btn:pressed {
-    -fx-background-color: #5a3eae;
-    -fx-effect: none;
+    -fx-background-color: #5a3442;
+    -fx-effect: innershadow(gaussian, rgba(0,0,0,0.50), 6, 0, 0, 2);
+    -fx-translate-y: 1;
 }
 
 .tutorial-back-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #9080c8;
+    -fx-text-fill: #6B8FA3;
     -fx-font-size: 13px;
     -fx-padding: 9 14 9 14;
-    -fx-background-radius: 9;
-    -fx-border-color: #4a3870;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(43,79,96,0.70);
     -fx-border-width: 1;
-    -fx-border-radius: 9;
+    -fx-border-radius: 10;
+    -fx-cursor: hand;
 }
 
 .tutorial-back-btn:hover {
-    -fx-background-color: rgba(167,139,250,0.10);
-    -fx-border-color: #7c5ce8;
-    -fx-text-fill: #c4b0ff;
+    -fx-background-color: rgba(43,79,96,0.30);
+    -fx-border-color: rgba(107,143,163,0.55);
+    -fx-text-fill: #BDC7C9;
+    -fx-effect: dropshadow(gaussian, rgba(43,79,96,0.30), 8, 0, 0, 0);
 }
 
 .tutorial-back-btn:pressed {
-    -fx-background-color: rgba(167,139,250,0.18);
+    -fx-background-color: rgba(43,79,96,0.50);
+    -fx-translate-y: 1;
 }
 
 .tutorial-skip-btn {
     -fx-background-color: transparent;
-    -fx-text-fill: #524878;
+    -fx-text-fill: rgba(43,79,96,0.90);
     -fx-font-size: 12px;
     -fx-padding: 9 12 9 12;
     -fx-border-width: 0;
+    -fx-cursor: hand;
 }
 
 .tutorial-skip-btn:hover {
-    -fx-text-fill: #9080c0;
+    -fx-text-fill: #6B8FA3;
+    -fx-background-color: rgba(43,79,96,0.18);
+    -fx-background-radius: 7;
+}
+
+/* ── Contador de paso ("2 / 8") ──────────────────────────── */
+
+.tutorial-step-counter {
+    -fx-font-size: 10px;
+    -fx-font-weight: bold;
+    -fx-text-fill: rgba(43,79,96,0.90);
+    -fx-padding: 0 0 2 0;
+}
+
+/* ── Hint de teclado ─────────────────────────────────────── */
+
+.tutorial-key-hint {
+    -fx-font-size: 10px;
+    -fx-text-fill: rgba(43,79,96,0.70);
+    -fx-padding: 4 0 0 0;
+    -fx-font-style: italic;
 }

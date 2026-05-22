@@ -14,6 +14,9 @@
         <ScrollPane fitToHeight="true" fitToWidth="true" hbarPolicy="AS_NEEDED" vbarPolicy="NEVER" styleClass="toolbar-scroll">
             <content>
                 <ToolBar fx:id="toolBar">
+                    <!-- Marca visual de la app -->
+                    <Label text="◆" styleClass="brand-mark"/>
+                    <Separator orientation="VERTICAL"/>
                     <Button fx:id="btnClear" text="🗑 Limpiar" onAction="#handleClear">
                         <tooltip><Tooltip text="Borrar todo el lienzo"/></tooltip>
                     </Button>
@@ -45,11 +48,11 @@
             <left>
                 <VBox fx:id="sidePalette" spacing="5" prefWidth="210" minWidth="190" styleClass="side-palette">
                     <padding>
-                        <Insets top="8" right="8" bottom="8" left="8"/>
+                        <Insets top="10" right="8" bottom="8" left="8"/>
                     </padding>
                     <Label fx:id="lblPalette" text="PALETA DE CUERPO" styleClass="section-title" />
                     <ScrollPane fitToWidth="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                        <VBox fx:id="paletteContainer" spacing="4" styleClass="palette-container">
+                        <VBox fx:id="paletteContainer" spacing="6" styleClass="palette-container">
                             <!-- Los botones de la paleta se generan dinámicamente -->
                         </VBox>
                     </ScrollPane>
@@ -65,17 +68,35 @@
                                     width="900" height="600"
                                     onMousePressed="#handleMousePressed"
                                     onMouseDragged="#handleMouseDragged"
-                                    onMouseReleased="#handleMouseReleased"/>
+                                    onMouseReleased="#handleMouseReleased"
+                                    onMouseMoved="#handleMouseMoved"
+                                    onMouseExited="#handleMouseExited"/>
                         </StackPane>
                     </StackPane>
 
-                    <VBox spacing="4" styleClass="gallery-root">
-                        <Label fx:id="lblGallery" text="GALERÍA DE REFERENCIAS" styleClass="section-title"/>
-                        <ScrollPane fitToWidth="true" fitToHeight="true" VBox.vgrow="ALWAYS" styleClass="flat-scroll">
-                            <FlowPane fx:id="galleryPane" hgap="10" vgap="10" prefWrapLength="900" styleClass="gallery-pane">
-                                <!-- Las imágenes aparecen aquí -->
-                            </FlowPane>
-                        </ScrollPane>
+                    <VBox spacing="0" styleClass="gallery-root">
+                        <Label fx:id="lblGallery" text="GALERÍA DE REFERENCIAS" styleClass="gallery-section-title">
+                            <VBox.margin><Insets bottom="4"/></VBox.margin>
+                        </Label>
+                        <!-- StackPane: galería real + placeholder cuando está vacía -->
+                        <StackPane VBox.vgrow="ALWAYS">
+                            <ScrollPane fitToWidth="true" fitToHeight="true" styleClass="flat-scroll">
+                                <FlowPane fx:id="galleryPane" hgap="10" vgap="10" prefWrapLength="900" styleClass="gallery-pane">
+                                    <!-- Las imágenes aparecen aquí -->
+                                </FlowPane>
+                            </ScrollPane>
+                            <!-- Estado vacío: visible mientras no haya resultados -->
+                            <VBox fx:id="galleryEmptyState" alignment="CENTER" spacing="14"
+                                  mouseTransparent="true" styleClass="gallery-empty-state">
+                                <padding><Insets bottom="36"/></padding>
+                                <Label text="✦" styleClass="gallery-empty-icon"/>
+                                <Label fx:id="galleryEmptyLabel"
+                                       text="Dibuja una pose y pulsa 🔍 para buscar referencias"
+                                       wrapText="true" textAlignment="CENTER"
+                                       maxWidth="440"
+                                       styleClass="gallery-empty-text"/>
+                            </VBox>
+                        </StackPane>
                     </VBox>
                 </SplitPane>
             </center>
@@ -93,7 +114,7 @@
                 <HBox spacing="10" alignment="CENTER_LEFT">
                     <Label fx:id="lblBatch" text="Lote" styleClass="progress-row-label" minWidth="46"/>
                     <StackPane HBox.hgrow="ALWAYS">
-                        <ProgressBar fx:id="batchProgressBar" prefHeight="11" maxWidth="Infinity" progress="0" styleClass="batch-progress-bar"/>
+                        <ProgressBar fx:id="batchProgressBar" prefHeight="10" maxWidth="Infinity" progress="0" styleClass="batch-progress-bar"/>
                         <Label fx:id="batchPctLabel" text="" styleClass="progress-pct-small" mouseTransparent="true"/>
                     </StackPane>
                 </HBox>

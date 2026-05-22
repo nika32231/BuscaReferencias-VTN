@@ -347,8 +347,16 @@ public class MediaPipeService {
         java.util.Set<String> regions = new java.util.HashSet<>();
         if (joints.containsKey(AnatomyPart.HEAD)) regions.add("HEAD");
         if (joints.containsKey(AnatomyPart.TORSO)) regions.add("UPPER");
-        if (joints.containsKey(AnatomyPart.ARMS) || joints.containsKey(AnatomyPart.FOREARMS) || joints.containsKey(AnatomyPart.HANDS)) regions.add("ARMS");
-        if (joints.containsKey(AnatomyPart.THIGHS) || joints.containsKey(AnatomyPart.CALVES) || joints.containsKey(AnatomyPart.FEET)) regions.add("LOWER");
+        if (joints.containsKey(AnatomyPart.ARMS)     || joints.containsKey(AnatomyPart.FOREARMS)    || joints.containsKey(AnatomyPart.HANDS)
+         || joints.containsKey(AnatomyPart.LEFT_ARM)  || joints.containsKey(AnatomyPart.RIGHT_ARM)
+         || joints.containsKey(AnatomyPart.LEFT_FOREARM) || joints.containsKey(AnatomyPart.RIGHT_FOREARM)
+         || joints.containsKey(AnatomyPart.LEFT_HAND) || joints.containsKey(AnatomyPart.RIGHT_HAND))
+            regions.add("ARMS");
+        if (joints.containsKey(AnatomyPart.THIGHS)   || joints.containsKey(AnatomyPart.CALVES)      || joints.containsKey(AnatomyPart.FEET)
+         || joints.containsKey(AnatomyPart.LEFT_THIGH)|| joints.containsKey(AnatomyPart.RIGHT_THIGH)
+         || joints.containsKey(AnatomyPart.LEFT_CALF) || joints.containsKey(AnatomyPart.RIGHT_CALF)
+         || joints.containsKey(AnatomyPart.LEFT_FOOT) || joints.containsKey(AnatomyPart.RIGHT_FOOT))
+            regions.add("LOWER");
         return regions;
     }
 
@@ -377,13 +385,30 @@ public class MediaPipeService {
 
     private static java.util.Map<AnatomyPart, Integer[]> partToLandmarkIds() {
         java.util.Map<AnatomyPart, Integer[]> mapping = new java.util.HashMap<>();
+        // ── No bilaterales ────────────────────────────────────────────────────
         mapping.put(AnatomyPart.HEAD, new Integer[]{0});
-        mapping.put(AnatomyPart.ARMS, new Integer[]{11, 12});
+        // ── Splits bilaterales: cada lado con su landmark específico ──────────
+        // Esto permite comparar brazo izquierdo dibujado con landmark izquierdo
+        // de MediaPipe (no con el promedio de ambos lados).
+        mapping.put(AnatomyPart.LEFT_ARM,      new Integer[]{11}); // hombro izq.
+        mapping.put(AnatomyPart.RIGHT_ARM,     new Integer[]{12}); // hombro der.
+        mapping.put(AnatomyPart.LEFT_FOREARM,  new Integer[]{13}); // codo izq.
+        mapping.put(AnatomyPart.RIGHT_FOREARM, new Integer[]{14}); // codo der.
+        mapping.put(AnatomyPart.LEFT_HAND,     new Integer[]{15}); // muñeca izq.
+        mapping.put(AnatomyPart.RIGHT_HAND,    new Integer[]{16}); // muñeca der.
+        mapping.put(AnatomyPart.LEFT_THIGH,    new Integer[]{23}); // cadera izq.
+        mapping.put(AnatomyPart.RIGHT_THIGH,   new Integer[]{24}); // cadera der.
+        mapping.put(AnatomyPart.LEFT_CALF,     new Integer[]{25}); // rodilla izq.
+        mapping.put(AnatomyPart.RIGHT_CALF,    new Integer[]{26}); // rodilla der.
+        mapping.put(AnatomyPart.LEFT_FOOT,     new Integer[]{27}); // tobillo izq.
+        mapping.put(AnatomyPart.RIGHT_FOOT,    new Integer[]{28}); // tobillo der.
+        // ── Centroides combinados (fallback cuando no hay split bilateral) ─────
+        mapping.put(AnatomyPart.ARMS,     new Integer[]{11, 12});
         mapping.put(AnatomyPart.FOREARMS, new Integer[]{13, 14});
-        mapping.put(AnatomyPart.HANDS, new Integer[]{15, 16});
-        mapping.put(AnatomyPart.THIGHS, new Integer[]{23, 24});
-        mapping.put(AnatomyPart.CALVES, new Integer[]{25, 26});
-        mapping.put(AnatomyPart.FEET, new Integer[]{27, 28});
+        mapping.put(AnatomyPart.HANDS,    new Integer[]{15, 16});
+        mapping.put(AnatomyPart.THIGHS,   new Integer[]{23, 24});
+        mapping.put(AnatomyPart.CALVES,   new Integer[]{25, 26});
+        mapping.put(AnatomyPart.FEET,     new Integer[]{27, 28});
         return mapping;
     }
 
@@ -618,27 +643,61 @@ public class MediaPipeService {
         return new double[]{(1.0 - (diff / Math.PI)) * 3.0, 3.0};
     }
 
-    /** Ángulo del codo: torso → hombro → antebrazo. Compara con ambos lados. */
+    /**
+     * Compara la dirección del brazo en el dibujo con la del brazo en la foto.
+     *
+     * <p>Con detección bilateral (LEFT_ARM + LEFT_FOREARM disponibles), compara el
+     * vector hombro→codo de cada lado por separado con el landmark correspondiente
+     * de MediaPipe. Esto discrimina correctamente una T-pose (brazos horizontales)
+     * de brazos caídos (verticales), algo que el ángulo de codo clásico no captura.</p>
+     *
+     * <p>Sin bilateral (joints combinados), usa el método heredado de ángulo de codo.</p>
+     */
     private static double[] scoreArmAngle(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
             java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        double tolerance = PoseToleranceConfig.armAngleTolerance();
+        double totalScore = 0;
+        int counted = 0;
+
+        // ── Bilateral: comparación por dirección vectorial hombro→codo ──────
+        if (joints.containsKey(AnatomyPart.LEFT_ARM) && joints.containsKey(AnatomyPart.LEFT_FOREARM)
+                && lm.containsKey(11) && lm.containsKey(13)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_ARM), joints.get(AnatomyPart.LEFT_FOREARM));
+            double imgDir  = vectorAngleDeg(lm.get(11), lm.get(13));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_ARM) && joints.containsKey(AnatomyPart.RIGHT_FOREARM)
+                && lm.containsKey(12) && lm.containsKey(14)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_ARM), joints.get(AnatomyPart.RIGHT_FOREARM));
+            double imgDir  = vectorAngleDeg(lm.get(12), lm.get(14));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) {
+            return new double[]{(totalScore / counted) * 2.0, 2.0};
+        }
+
+        // ── Fallback: joints combinados (sin detección bilateral) ────────────
         if (!joints.containsKey(AnatomyPart.TORSO)
                 || !joints.containsKey(AnatomyPart.ARMS)
                 || !joints.containsKey(AnatomyPart.FOREARMS)) return new double[]{0, 0};
         double drawAngle = PoseData.calculateAngle(
                 joints.get(AnatomyPart.TORSO), joints.get(AnatomyPart.ARMS), joints.get(AnatomyPart.FOREARMS));
         double best = 0;
-        if (lm.containsKey(11) && lm.containsKey(13) && lm.containsKey(15)) {
+        if (lm.containsKey(11) && lm.containsKey(13) && lm.containsKey(15))
             best = Math.max(best, angleMatchScore(drawAngle,
-                    PoseData.calculateAngle(lm.get(11), lm.get(13), lm.get(15)),
-                    PoseToleranceConfig.armAngleTolerance()));
-        }
-        if (lm.containsKey(12) && lm.containsKey(14) && lm.containsKey(16)) {
+                    PoseData.calculateAngle(lm.get(11), lm.get(13), lm.get(15)), tolerance));
+        if (lm.containsKey(12) && lm.containsKey(14) && lm.containsKey(16))
             best = Math.max(best, angleMatchScore(drawAngle,
-                    PoseData.calculateAngle(lm.get(12), lm.get(14), lm.get(16)),
-                    PoseToleranceConfig.armAngleTolerance()));
-        }
+                    PoseData.calculateAngle(lm.get(12), lm.get(14), lm.get(16)), tolerance));
         return best > 0 ? new double[]{best * 2.0, 2.0} : new double[]{0, 0};
+    }
+
+    /** Ángulo en grados del vector desde {@code from} hasta {@code to}. */
+    private static double vectorAngleDeg(javafx.geometry.Point2D from, javafx.geometry.Point2D to) {
+        return Math.toDegrees(Math.atan2(to.getY() - from.getY(), to.getX() - from.getX()));
     }
 
     /** Comprueba si las manos están levantadas por encima de la cabeza. */
@@ -654,26 +713,46 @@ public class MediaPipeService {
         return new double[]{drawHandsUp == imgHandsUp ? 2.0 : 0.0, 2.0};
     }
 
-    /** Ángulo de la rodilla: muslo → pantorrilla → pie. Compara con ambas piernas. */
+    /** Ángulo de la pierna: dirección cadera→rodilla por lado. Bilateral cuando disponible. */
     private static double[] scoreLegAngle(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
             java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        double tolerance = PoseToleranceConfig.legAngleTolerance();
+        double totalScore = 0;
+        int counted = 0;
+
+        // ── Bilateral: dirección vectorial cadera→rodilla ─────────────────────
+        if (joints.containsKey(AnatomyPart.LEFT_THIGH) && joints.containsKey(AnatomyPart.LEFT_CALF)
+                && lm.containsKey(23) && lm.containsKey(25)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_THIGH), joints.get(AnatomyPart.LEFT_CALF));
+            double imgDir  = vectorAngleDeg(lm.get(23), lm.get(25));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_THIGH) && joints.containsKey(AnatomyPart.RIGHT_CALF)
+                && lm.containsKey(24) && lm.containsKey(26)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_THIGH), joints.get(AnatomyPart.RIGHT_CALF));
+            double imgDir  = vectorAngleDeg(lm.get(24), lm.get(26));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) {
+            return new double[]{(totalScore / counted) * 1.5, 1.5};
+        }
+
+        // ── Fallback: joints combinados ───────────────────────────────────────
         if (!joints.containsKey(AnatomyPart.THIGHS)
                 || !joints.containsKey(AnatomyPart.CALVES)
                 || !joints.containsKey(AnatomyPart.FEET)) return new double[]{0, 0};
         double drawAngle = PoseData.calculateAngle(
                 joints.get(AnatomyPart.THIGHS), joints.get(AnatomyPart.CALVES), joints.get(AnatomyPart.FEET));
         double best = 0;
-        if (lm.containsKey(23) && lm.containsKey(25) && lm.containsKey(27)) {
+        if (lm.containsKey(23) && lm.containsKey(25) && lm.containsKey(27))
             best = Math.max(best, angleMatchScore(drawAngle,
-                    PoseData.calculateAngle(lm.get(23), lm.get(25), lm.get(27)),
-                    PoseToleranceConfig.legAngleTolerance()));
-        }
-        if (lm.containsKey(24) && lm.containsKey(26) && lm.containsKey(28)) {
+                    PoseData.calculateAngle(lm.get(23), lm.get(25), lm.get(27)), tolerance));
+        if (lm.containsKey(24) && lm.containsKey(26) && lm.containsKey(28))
             best = Math.max(best, angleMatchScore(drawAngle,
-                    PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28)),
-                    PoseToleranceConfig.legAngleTolerance()));
-        }
+                    PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28)), tolerance));
         return best > 0 ? new double[]{best * 1.5, 1.5} : new double[]{0, 0};
     }
 
