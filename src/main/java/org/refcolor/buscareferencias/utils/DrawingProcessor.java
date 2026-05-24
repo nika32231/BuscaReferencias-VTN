@@ -40,8 +40,15 @@ public class DrawingProcessor {
     /**
      * Número mínimo de píxeles en un semilado para considerar que esa mitad
      * contiene un trazo real (y crear el joint bilateral correspondiente).
+     *
+     * <p>El valor es deliberadamente bajo (15) porque la detección de color ya
+     * filtra el sangrado de antialiasing mediante el umbral de saturación
+     * {@code MIN_SATURATION}: un píxel de borde AA tiene típicamente S ≈ 0.05-0.10
+     * y no supera el filtro. Por ello no es necesaria una barrera alta para evitar
+     * falsos positivos. Un valor alto (p.ej. 50) hacía que trazos cortos no
+     * activasen la detección bilateral, contabilizando dos brazos dibujados como uno.</p>
      */
-    private static final int MIN_BILATERAL_PIXELS = 50;
+    private static final int MIN_BILATERAL_PIXELS = 15;
 
     // Solo los ítems de paleta se usan para la detección por color
     private static final AnatomyPart[] PALETTE_PARTS;
@@ -148,9 +155,21 @@ public class DrawingProcessor {
         }
 
         if (bilateralJointsAdded > 0) {
-            logger.debug("[DRAW] {} joints bilaterales detectados (L/R)", bilateralJointsAdded);
+            logger.info("[DRAW] {} joints bilaterales detectados (L/R)  lCnts={} rCnts={}",
+                    bilateralJointsAdded,
+                    buildSideCountSummary(lCnt),
+                    buildSideCountSummary(rCnt));
         }
         return pose;
+    }
+
+    /** Resumen compacto de conteos por lado para logging (solo partes con > 0 píxeles). */
+    private static String buildSideCountSummary(Map<AnatomyPart, Integer> cntMap) {
+        StringBuilder sb = new StringBuilder("{");
+        cntMap.forEach((part, cnt) -> {
+            if (cnt > 0) sb.append(part.name()).append("=").append(cnt).append(" ");
+        });
+        return sb.append("}").toString();
     }
 
     /**

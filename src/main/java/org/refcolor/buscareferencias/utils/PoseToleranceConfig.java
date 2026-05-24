@@ -9,9 +9,9 @@ import org.refcolor.buscareferencias.model.AnatomyPart;
  */
 public final class PoseToleranceConfig {
 
-    private static final double DEFAULT_SKELETON = 2.5;
-    private static final double DEFAULT_ARM_ANGLE = 360.0;
-    private static final double DEFAULT_LEG_ANGLE = 360.0;
+    private static final double DEFAULT_SKELETON  = 1.5;   // era 2.5 — más estricto para distinguir poses
+    private static final double DEFAULT_ARM_ANGLE = 60.0;   // era 360.0 — >60° de diferencia = 0 score
+    private static final double DEFAULT_LEG_ANGLE = 90.0;   // era 360.0 — >90° de diferencia = 0 score
     private static final int DEFAULT_MIN_RESULTS = 5;
     private static final int DEFAULT_MAX_RESULTS = 10;
     private static final int DEFAULT_ANALYSIS_LIMIT = 400;

@@ -172,12 +172,14 @@ public class PoseData {
 
     public void setEmbeddingFromJson(String jsonStr) {
         if (jsonStr == null || jsonStr.isEmpty()) return;
-        org.json.JSONArray array = new org.json.JSONArray(jsonStr);
-        List<Double> list = new ArrayList<>();
-        for (int i = 0; i < array.length(); i++) {
-            list.add(array.getDouble(i));
-        }
-        setEmbedding(list);
+        try {
+            org.json.JSONArray array = new org.json.JSONArray(jsonStr);
+            List<Double> list = new ArrayList<>();
+            for (int i = 0; i < array.length(); i++) {
+                try { list.add(array.getDouble(i)); } catch (Exception ignored) {}
+            }
+            setEmbedding(list);
+        } catch (Exception ignored) {}
     }
 
     /**

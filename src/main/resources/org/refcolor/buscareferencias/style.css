@@ -277,7 +277,8 @@
 }
 
 .palette-container {
-    -fx-padding: 6 6 10 6;
+    -fx-padding: 6 6 12 6;
+    -fx-spacing: 4;
     -fx-background-color: transparent;
 }
 
@@ -287,15 +288,17 @@
    Aquí solo definimos la geometría y cursor base.            */
 
 .palette-pill-button {
-    -fx-font-size: 13px;
-    -fx-font-weight: bold;
-    -fx-min-height: 38;
-    -fx-pref-height: 38;
+    /* Geometría base — color y fondo los aplica Java con inline style */
+    -fx-font-size: 14px;
+    -fx-font-weight: normal;
+    -fx-min-height: 44;
+    -fx-pref-height: 44;
     -fx-background-radius: 10;
     -fx-border-radius: 10;
     -fx-cursor: hand;
-    -fx-alignment: center;
-    -fx-padding: 8 15 8 15;
+    -fx-alignment: center-left;
+    -fx-padding: 8 14 8 14;
+    -fx-content-display: graphic-only;
 }
 
 /* Bajada mínima al pulsar para reforzar sensación táctil */
@@ -577,9 +580,9 @@
 }
 
 .compact-mode .palette-pill-button {
-    -fx-min-height: 36;
-    -fx-pref-height: 36;
-    -fx-font-size: 12px;
+    -fx-min-height: 40;
+    -fx-pref-height: 40;
+    -fx-padding: 7 12 7 12;
 }
 
 .compact-mode .section-title,
@@ -598,7 +601,7 @@
 .phone-mode .palette-pill-button {
     -fx-min-height: 34;
     -fx-pref-height: 34;
-    -fx-font-size: 11px;
+    -fx-padding: 5 9 5 9;
 }
 
 .touch-mode .button,
@@ -607,8 +610,9 @@
 }
 
 .large-mode .palette-pill-button {
-    -fx-min-height: 48;
-    -fx-pref-height: 48;
+    -fx-min-height: 54;
+    -fx-pref-height: 54;
+    -fx-padding: 10 16 10 16;
 }
 
 .large-mode .canvas-root {

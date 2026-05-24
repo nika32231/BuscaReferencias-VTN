@@ -46,7 +46,7 @@
     <center>
         <BorderPane>
             <left>
-                <VBox fx:id="sidePalette" spacing="5" prefWidth="210" minWidth="190" styleClass="side-palette">
+                <VBox fx:id="sidePalette" spacing="5" prefWidth="310" minWidth="285" styleClass="side-palette">
                     <padding>
                         <Insets top="10" right="8" bottom="8" left="8"/>
                     </padding>

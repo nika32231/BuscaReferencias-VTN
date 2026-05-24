@@ -38,6 +38,8 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.input.TouchEvent;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
@@ -52,6 +54,7 @@ import org.refcolor.buscareferencias.i18n.I18n;
 import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
+import org.refcolor.buscareferencias.model.SimilarityBreakdown;
 import org.refcolor.buscareferencias.service.SearchService;
 import org.refcolor.buscareferencias.tutorial.TutorialOverlay;
 import org.refcolor.buscareferencias.utils.DrawingProcessor;
@@ -277,17 +280,17 @@ public class DrawingController {
 
         if (sidePalette != null) {
             if (phone) {
-                sidePalette.setPrefWidth(144);
-                sidePalette.setMinWidth(120);
+                sidePalette.setPrefWidth(220);
+                sidePalette.setMinWidth(200);
             } else if (compact) {
-                sidePalette.setPrefWidth(178);
-                sidePalette.setMinWidth(150);
+                sidePalette.setPrefWidth(285);
+                sidePalette.setMinWidth(260);
             } else if (large) {
-                sidePalette.setPrefWidth(232);
-                sidePalette.setMinWidth(210);
+                sidePalette.setPrefWidth(360);
+                sidePalette.setMinWidth(330);
             } else {
-                sidePalette.setPrefWidth(210);
-                sidePalette.setMinWidth(190);
+                sidePalette.setPrefWidth(310);
+                sidePalette.setMinWidth(285);
             }
         }
 
@@ -380,12 +383,12 @@ public class DrawingController {
         double available = galleryPane.getWidth();
         if (available <= 0) available = sceneWidth < BREAKPOINT_PHONE ? 320 : 760;
 
-        double target = sceneWidth < BREAKPOINT_PHONE ? 120
-                      : sceneWidth < BREAKPOINT_COMPACT ? 136
-                      : sceneWidth >= BREAKPOINT_LARGE  ? 180
-                      : 150;
+        double target = sceneWidth < BREAKPOINT_PHONE ? 160
+                      : sceneWidth < BREAKPOINT_COMPACT ? 180
+                      : sceneWidth >= BREAKPOINT_LARGE  ? 240
+                      : 200;
         int cols = Math.max(2, (int) Math.floor((available + 12) / (target + 12)));
-        currentGalleryImageSize = clamp((available - ((cols - 1) * 12.0)) / cols, 104, 170);
+        currentGalleryImageSize = clamp((available - ((cols - 1) * 12.0)) / cols, 140, 280);
         galleryPane.setPrefWrapLength(available);
         refreshGalleryCardsSize();
     }
@@ -393,13 +396,25 @@ public class DrawingController {
     private void refreshGalleryCardsSize() {
         if (galleryPane == null) return;
         for (Node n : galleryPane.getChildren()) {
-            if (!(n instanceof VBox card)) continue;
-            card.setPrefWidth(currentGalleryImageSize + 10);
-            card.setPrefHeight(currentGalleryImageSize + 56);
-            for (Node child : card.getChildren()) {
-                if (child instanceof ImageView iv) {
-                    iv.setFitWidth(currentGalleryImageSize);
-                    iv.setFitHeight(currentGalleryImageSize);
+            // Estructura: HBox(container) → VBox(imageCard) + StackPane(infoPanelWrapper)
+            if (!(n instanceof HBox container)) continue;
+            if (container.getChildren().isEmpty()) continue;
+            Node first = container.getChildren().get(0);
+            if (!(first instanceof VBox imageCard)) continue;
+            imageCard.setPrefWidth(currentGalleryImageSize + 10);
+            imageCard.setPrefHeight(currentGalleryImageSize + 56);
+            for (Node child : imageCard.getChildren()) {
+                if (child instanceof StackPane stack) {
+                    if (stack.getClip() instanceof Rectangle clip) {
+                        clip.setWidth(currentGalleryImageSize);
+                        clip.setHeight(currentGalleryImageSize);
+                    }
+                    for (Node sc : stack.getChildren()) {
+                        if (sc instanceof ImageView iv) {
+                            iv.setFitWidth(currentGalleryImageSize);
+                            iv.setFitHeight(currentGalleryImageSize);
+                        }
+                    }
                 }
             }
         }
@@ -416,119 +431,177 @@ public class DrawingController {
     private void setupPalette() {
         AnatomyPart selected = currentPart != null ? currentPart : AnatomyPart.HEAD;
         ToggleGroup paletteGroup = new ToggleGroup();
+        paletteContainer.getChildren().clear();
 
-        for (AnatomyPart part : AnatomyPart.values()) {
-            if (!part.isPaletteItem()) continue;
+        // ── Cabeza y torso ─────────────────────────────────────────────────────
+        paletteContainer.getChildren().add(createPaletteBtn(AnatomyPart.HEAD,  paletteGroup, selected));
+        paletteContainer.getChildren().add(createPaletteBtn(AnatomyPart.TORSO, paletteGroup, selected));
 
-            String partName = I18n.t("anatomy." + part.name());
+        // ── Sección: Brazos ────────────────────────────────────────────────────
+        paletteContainer.getChildren().add(makeSectionLabel(
+                I18n.isEnglish() ? "ARMS" : "BRAZOS"));
+        paletteContainer.getChildren().add(createPaletteBtn(AnatomyPart.SHOULDERS, paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_ARM,     AnatomyPart.RIGHT_ARM,     paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_FOREARM, AnatomyPart.RIGHT_FOREARM, paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_HAND,    AnatomyPart.RIGHT_HAND,    paletteGroup, selected));
 
-            ToggleButton colorBtn = new ToggleButton(partName);
-            colorBtn.setToggleGroup(paletteGroup);
-            colorBtn.getStyleClass().add("palette-pill-button");
-            colorBtn.setUserData(part);
-            colorBtn.setMaxWidth(Double.MAX_VALUE);
-            colorBtn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
+        // ── Sección: Piernas ───────────────────────────────────────────────────
+        paletteContainer.getChildren().add(makeSectionLabel(
+                I18n.isEnglish() ? "LEGS" : "PIERNAS"));
+        paletteContainer.getChildren().add(createPaletteBtn(AnatomyPart.HIPS, paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_THIGH, AnatomyPart.RIGHT_THIGH, paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_CALF,  AnatomyPart.RIGHT_CALF,  paletteGroup, selected));
+        paletteContainer.getChildren().add(makePalettePairRow(
+                AnatomyPart.LEFT_FOOT,  AnatomyPart.RIGHT_FOOT,  paletteGroup, selected));
+    }
 
-            // Estilo inicial
-            colorBtn.setStyle(buildPillStyle(part, 0));
+    /** Crea un separador de sección con texto pequeño. */
+    private static javafx.scene.control.Label makeSectionLabel(String text) {
+        var lbl = new javafx.scene.control.Label(text);
+        lbl.setMaxWidth(Double.MAX_VALUE);
+        lbl.setStyle(
+            "-fx-font-size: 10px;" +
+            "-fx-font-weight: bold;" +
+            "-fx-text-fill: rgba(180,210,235,0.60);" +
+            "-fx-padding: 8 0 3 6;" +
+            "-fx-border-width: 0 0 1 0;" +
+            "-fx-border-color: rgba(180,210,235,0.22);" +
+            "-fx-background-color: transparent;");
+        return lbl;
+    }
 
-            // Hover: cambia estilo inline igual que la barra de herramientas
-            colorBtn.hoverProperty().addListener((obs, was, now) -> {
-                if (!colorBtn.isSelected()) {
-                    colorBtn.setStyle(buildPillStyle(part, now ? 1 : 0));
-                }
-            });
+    /** Crea una fila HBox con dos botones de paleta lado a lado (Izq. | Der.). */
+    private HBox makePalettePairRow(AnatomyPart left, AnatomyPart right,
+                                    ToggleGroup group, AnatomyPart selected) {
+        HBox row = new HBox(5);
+        row.setMaxWidth(Double.MAX_VALUE);
+        ToggleButton lBtn = createPaletteBtn(left,  group, selected);
+        ToggleButton rBtn = createPaletteBtn(right, group, selected);
+        HBox.setHgrow(lBtn, Priority.ALWAYS);
+        HBox.setHgrow(rBtn, Priority.ALWAYS);
+        lBtn.setMaxWidth(Double.MAX_VALUE);
+        rBtn.setMaxWidth(Double.MAX_VALUE);
+        row.getChildren().addAll(lBtn, rBtn);
+        return row;
+    }
 
-            colorBtn.selectedProperty().addListener((obs, was, now) -> {
-                colorBtn.setStyle(buildPillStyle(part, now ? 2 : 0));
-                colorBtn.setScaleX(1.0);
-                colorBtn.setScaleY(1.0);
-                if (now) {
-                    ScaleTransition bounce = new ScaleTransition(Duration.millis(130), colorBtn);
-                    bounce.setFromX(0.94); bounce.setFromY(0.94);
-                    bounce.setToX(1.0);   bounce.setToY(1.0);
-                    bounce.setInterpolator(Interpolator.EASE_OUT);
-                    bounce.play();
-                }
-            });
+    /** Crea un único ToggleButton de paleta con sus listeners de estilo y acción. */
+    private ToggleButton createPaletteBtn(AnatomyPart part, ToggleGroup group, AnatomyPart selected) {
+        String partName = I18n.t("anatomy." + part.name());
+        ToggleButton btn = new ToggleButton();
+        btn.setToggleGroup(group);
+        btn.getStyleClass().add("palette-pill-button");
+        btn.setUserData(part);
+        btn.setMaxWidth(Double.MAX_VALUE);
+        btn.setTooltip(new Tooltip(I18n.fmt("palette.tooltip", partName)));
+        btn.setGraphic(buildPaletteGraphic(part, partName, false));
+        btn.setStyle(buildPillStyle(part, 0));
 
-            colorBtn.setOnAction(e -> {
-                currentPart = part;
-                btnDraw.setSelected(true);
-                statusLabel.setText(I18n.fmt("status.drawing", I18n.t("anatomy." + part.name())));
-                gc.setStroke(Color.web(currentPart.getHexColor()));
-            });
+        btn.hoverProperty().addListener((obs, was, now) -> {
+            if (!btn.isSelected()) btn.setStyle(buildPillStyle(part, now ? 1 : 0));
+        });
+        btn.selectedProperty().addListener((obs, was, now) -> {
+            btn.setGraphic(buildPaletteGraphic(part, partName, now));
+            btn.setStyle(buildPillStyle(part, now ? 2 : 0));
+            btn.setScaleX(1.0); btn.setScaleY(1.0);
+            if (now) {
+                ScaleTransition bounce = new ScaleTransition(Duration.millis(130), btn);
+                bounce.setFromX(0.94); bounce.setFromY(0.94);
+                bounce.setToX(1.0);   bounce.setToY(1.0);
+                bounce.setInterpolator(Interpolator.EASE_OUT);
+                bounce.play();
+            }
+        });
+        btn.setOnAction(e -> {
+            currentPart = part;
+            btnDraw.setSelected(true);
+            statusLabel.setText(I18n.fmt("status.drawing", I18n.t("anatomy." + part.name())));
+            gc.setStroke(Color.web(part.getHexColor()));
+        });
+        if (part == selected) btn.setSelected(true);
+        return btn;
+    }
 
-            if (part == selected) colorBtn.setSelected(true);
-            paletteContainer.getChildren().add(colorBtn);
+    /**
+     * Construye el gráfico interno del botón: [● swatch coloreado] + [texto].
+     *
+     * El círculo de color SIEMPRE muestra el hex exacto de la parte anatómica,
+     * independientemente del estado del botón (normal / hover / seleccionado).
+     * Así el usuario siempre ve con qué color va a dibujar.
+     */
+    private static HBox buildPaletteGraphic(AnatomyPart part, String label, boolean selected) {
+        Color base = Color.web(part.getHexColor());
+
+        // ── Círculo swatch ──────────────────────────────────────────────────────
+        javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(selected ? 11.0 : 9.5);
+        dot.setFill(base);
+        dot.setStroke(Color.web(selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)"));
+        dot.setStrokeWidth(selected ? 2.0 : 1.0);
+        if (selected) {
+            javafx.scene.effect.DropShadow glow = new javafx.scene.effect.DropShadow(
+                    14, 0, 0, new Color(base.getRed(), base.getGreen(), base.getBlue(), 0.90));
+            dot.setEffect(glow);
         }
+
+        // ── Etiqueta de texto ───────────────────────────────────────────────────
+        Label txt = new Label(label);
+        txt.setStyle("-fx-text-fill: " + (selected ? "#FFFFFF" : "rgba(198,220,242,0.92)") + ";"
+                   + " -fx-font-size: 14px;"
+                   + (selected ? " -fx-font-weight: bold;" : ""));
+
+        HBox box = new HBox(10, dot, txt);
+        box.setAlignment(Pos.CENTER_LEFT);
+        return box;
     }
 
     /**
      * Genera el inline style para un botón-pastilla de paleta.
      *
-     * El fondo se obtiene mezclando el color de cada parte con el acero oscuro
-     * del toolbar (#243D52 / #1C3A50) en lugar de negro puro.
-     * Resultado: mismo nivel de oscuridad y saturación que los botones del toolbar
-     * pero con el matiz de cada parte claramente visible en borde y texto.
+     * Nuevo esquema visual (fondo oscuro + acento lateral de color):
+     *   state 0 = normal   → fondo oscuro neutro + franja izquierda coloreada (3.5 px)
+     *   state 1 = hover    → fondo ligeramente más claro + franja 4 px + glow suave
+     *   state 2 = selected → fondo tintado con el color + borde blanco 2 px + glow fuerte
      *
-     * state 0 = normal   → fondo acero tintado, borde y texto del color de la parte
-     * state 1 = hover    → fondo ligeramente más claro (más hacia el color propio)
-     * state 2 = selected → color completo brillante con glow, igual que toolbar:selected
+     * El círculo swatch del gráfico ({@link #buildPaletteGraphic}) siempre muestra
+     * el color exacto, por lo que el fondo del botón no necesita serlo.
      */
     private static String buildPillStyle(AnatomyPart part, int state) {
-        Color base  = Color.web(part.getHexColor());
-        // Color "acero oscuro" del toolbar: mezclarlo con el color de la parte
-        // desatura y oscurece a la vez, acercando el botón al look del toolbar
-        Color steel     = Color.web("#243D52");
-        Color steelDark = Color.web("#1C3A50");
-
-        // Normal: 25% del color propio + 75% del acero del toolbar
-        String dark1  = toHex(base.interpolate(steel,     0.75));
-        String dark2  = toHex(base.interpolate(steelDark, 0.80));
-        // Hover: 40% del color propio + 60% del acero → más vivo
-        String hover1 = toHex(base.interpolate(steel,     0.58));
-        String hover2 = toHex(base.interpolate(steelDark, 0.65));
-
-        // Selected: gradiente del propio color (como toolbar:selected pero con el color de la parte)
-        String sel1   = toHex(base.interpolate(Color.WHITE, 0.20));
-
-        // Borde y texto: el color real de la parte (el indicador visible del color)
+        Color base = Color.web(part.getHexColor());
         int r = (int)(base.getRed()   * 255);
         int g = (int)(base.getGreen() * 255);
         int b = (int)(base.getBlue()  * 255);
-        // Borde: color real al 80 % de opacidad
-        String colorBdr  = "rgba(" + r + "," + g + "," + b + ",0.80)";
-        String colorBdrH = "rgba(" + r + "," + g + "," + b + ",0.95)";
-        // Texto: el color de la parte aclarado un 50 % para contraste sobre fondo oscuro
-        String textColor = toHex(base.interpolate(Color.WHITE, 0.50));
+
+        // Fondo tintado muy oscuro para el estado seleccionado
+        Color selectedBg = base.interpolate(Color.web("#0D1B26"), 0.78);
+        String glow = "dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.85), 18, 0.22, 0, 0)";
 
         return switch (state) {
-            case 1 -> // hover
-                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + hover1 + ", " + hover2 + ");" +
-                "-fx-background-radius: 10;" +
-                "-fx-border-color: " + colorBdrH + ";" +
-                "-fx-border-width: 1.5;" +
-                "-fx-border-radius: 10;" +
-                "-fx-text-fill: " + textColor + ";" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
-            case 2 -> // selected: color completo, igual que toolbar toggle:selected
-                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + sel1 + ", " + part.getHexColor() + ");" +
-                "-fx-background-radius: 10;" +
-                "-fx-border-color: rgba(255,255,255,0.55);" +
-                "-fx-border-width: 1.5;" +
-                "-fx-border-radius: 10;" +
-                "-fx-text-fill: rgba(255,255,255,0.97);" +
-                "-fx-effect: dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.80), 22, 0.10, 0, 0)," +
-                    "innershadow(gaussian, rgba(255,255,255,0.18), 4, 0, 0, 1);";
-            default -> // normal: fondo acero tintado + borde y texto del color real
-                "-fx-background-color: linear-gradient(from 0% 0% to 0% 100%, " + dark1 + ", " + dark2 + ");" +
-                "-fx-background-radius: 10;" +
-                "-fx-border-color: " + colorBdr + ";" +
-                "-fx-border-width: 1.5;" +
-                "-fx-border-radius: 10;" +
-                "-fx-text-fill: " + textColor + ";" +
-                "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.40), 4, 0, 0, 1);";
+            case 1 -> // hover: fondo algo más claro + franja izquierda 4 px + glow suave
+                "-fx-background-color: rgba(28,54,82,0.96);" +
+                "-fx-background-radius: 8;" +
+                "-fx-border-color: transparent transparent transparent rgba(" + r + "," + g + "," + b + ",1.0);" +
+                "-fx-border-width: 0 0 0 4;" +
+                "-fx-border-radius: 8;" +
+                "-fx-effect: " + glow + ";";
+            case 2 -> // selected: fondo tintado + borde blanco 2 px + glow fuerte
+                "-fx-background-color: " + toHex(selectedBg) + ";" +
+                "-fx-background-radius: 8;" +
+                "-fx-border-color: rgba(255,255,255,0.92);" +
+                "-fx-border-width: 2;" +
+                "-fx-border-radius: 8;" +
+                "-fx-effect: " + glow + ";";
+            default -> // normal: fondo oscuro + franja izquierda coloreada 3.5 px
+                "-fx-background-color: rgba(18,36,56,0.88);" +
+                "-fx-background-radius: 8;" +
+                "-fx-border-color: transparent transparent transparent rgba(" + r + "," + g + "," + b + ",0.80);" +
+                "-fx-border-width: 0 0 0 3.5;" +
+                "-fx-border-radius: 8;" +
+                "-fx-effect: dropshadow(gaussian,rgba(0,0,0,0.48),4,0,0,1);";
         };
     }
 
@@ -675,6 +748,7 @@ public class DrawingController {
             Platform.runLater(() -> Platform.runLater(() -> {
                 tutorialOverlay = buildTutorial();
                 if (!TutorialOverlay.hasSeenTutorial()) {
+                    drawTutorialStickman();
                     tutorialOverlay.show();
                 }
             }));
@@ -712,6 +786,118 @@ public class DrawingController {
         TutorialOverlay t = new TutorialOverlay(rootPane, steps);
         t.setOnFinish(TutorialOverlay::markSeen);
         return t;
+    }
+
+    /**
+     * Dibuja un stickman de demostración <em>anatómicamente correcto</em> usando
+     * los colores de cada {@link AnatomyPart}.
+     *
+     * <h3>Diseño anatómico</h3>
+     * <ul>
+     *   <li><b>SHOULDERS (hombros)</b> — círculos rellenos en la articulación exacta.
+     *       Mapean directamente a los landmarks LM 11/12 de MediaPipe → escala y
+     *       vectores de ángulo precisos.</li>
+     *   <li><b>ARMS</b> — líneas desde hombro hasta codo (parte superior del brazo).</li>
+     *   <li><b>FOREARMS</b> — líneas desde codo hasta muñeca (antebrazo doblado arriba).</li>
+     *   <li><b>HANDS</b> — pequeños óvalos en la muñeca.</li>
+     *   <li><b>HIPS (caderas)</b> — círculos rellenos en la articulación exacta.
+     *       Mapean a LM 23/24 → misma referencia de escala que la imagen.</li>
+     *   <li><b>THIGHS → CALVES → FEET</b> — segmentos de pierna desde cada cadera.</li>
+     * </ul>
+     *
+     * <p>Todos los pares (brazos, piernas, hombros, caderas) aparecen en ambos
+     * semilados del canvas para que {@link org.refcolor.buscareferencias.utils.DrawingProcessor}
+     * active la detección bilateral en cada parte.</p>
+     */
+    private void drawTutorialStickman() {
+        if (gc == null || canvas == null) return;
+
+        double W  = canvas.getWidth();
+        double H  = canvas.getHeight();
+        double cx = W * 0.50;
+
+        gc.save();
+        gc.setLineCap(javafx.scene.shape.StrokeLineCap.ROUND);
+        gc.setLineJoin(javafx.scene.shape.StrokeLineJoin.ROUND);
+        gc.setLineWidth(12.0);
+
+        // ── HEAD ──────────────────────────────────────────────────────────────
+        gc.setStroke(Color.web(AnatomyPart.HEAD.getHexColor()));
+        gc.strokeOval(cx - W * 0.037, H * 0.032, W * 0.074, H * 0.115);
+        //   Centro del óvalo: (cx, H*0.090)
+
+        // ── TORSO (columna vertebral) ──────────────────────────────────────────
+        gc.setStroke(Color.web(AnatomyPart.TORSO.getHexColor()));
+        gc.strokeLine(cx, H * 0.148, cx, H * 0.500);
+
+        // ── SHOULDERS — círculos rellenos en la articulación exacta ────────────
+        //   Posición: (cx ± W*0.110, H*0.220)  →  ≈ LM 11 / LM 12 de MediaPipe
+        double dotR = W * 0.016; // radio del círculo ≈ 14 px
+        Color shouldersColor = Color.web(AnatomyPart.SHOULDERS.getHexColor());
+        gc.setFill(shouldersColor);
+        gc.setStroke(shouldersColor);
+        gc.fillOval(cx - W * 0.110 - dotR, H * 0.220 - dotR, dotR * 2, dotR * 2); // hombro izq.
+        gc.fillOval(cx + W * 0.110 - dotR, H * 0.220 - dotR, dotR * 2, dotR * 2); // hombro der.
+
+        // ── BRAZOS (hombro → codo): color propio por lado ──────────────────────
+        gc.setStroke(Color.web(AnatomyPart.LEFT_ARM.getHexColor()));
+        gc.strokeLine(cx - W * 0.110, H * 0.220, cx - W * 0.220, H * 0.375); // brazo izq.
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_ARM.getHexColor()));
+        gc.strokeLine(cx + W * 0.110, H * 0.220, cx + W * 0.220, H * 0.375); // brazo der.
+
+        // ── ANTEBRAZOS (codo → muñeca, doblado hacia arriba): color por lado ───
+        gc.setStroke(Color.web(AnatomyPart.LEFT_FOREARM.getHexColor()));
+        gc.strokeLine(cx - W * 0.220, H * 0.375, cx - W * 0.270, H * 0.275); // antebrazo izq.
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_FOREARM.getHexColor()));
+        gc.strokeLine(cx + W * 0.220, H * 0.375, cx + W * 0.270, H * 0.275); // antebrazo der.
+
+        // ── MANOS (muñecas): color propio por lado ──────────────────────────────
+        double hw = W * 0.022, hh = H * 0.040;
+        gc.setStroke(Color.web(AnatomyPart.LEFT_HAND.getHexColor()));
+        gc.strokeOval(cx - W * 0.281, H * 0.251, hw, hh); // mano izq. → centro ≈ (cx-W*0.270, H*0.271)
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_HAND.getHexColor()));
+        gc.strokeOval(cx + W * 0.259, H * 0.251, hw, hh); // mano der. → centro ≈ (cx+W*0.270, H*0.271)
+
+        // ── HIPS — círculos rellenos en la articulación exacta ─────────────────
+        //   Posición: (cx ± W*0.055, H*0.500)  →  ≈ LM 23 / LM 24 de MediaPipe
+        Color hipsColor = Color.web(AnatomyPart.HIPS.getHexColor());
+        gc.setFill(hipsColor);
+        gc.setStroke(hipsColor);
+        gc.fillOval(cx - W * 0.055 - dotR, H * 0.500 - dotR, dotR * 2, dotR * 2); // cadera izq.
+        gc.fillOval(cx + W * 0.055 - dotR, H * 0.500 - dotR, dotR * 2, dotR * 2); // cadera der.
+
+        // ── MUSLOS (cadera → rodilla): color propio por lado ──────────────────
+        gc.setStroke(Color.web(AnatomyPart.LEFT_THIGH.getHexColor()));
+        gc.strokeLine(cx - W * 0.055, H * 0.500, cx - W * 0.090, H * 0.665); // muslo izq.
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_THIGH.getHexColor()));
+        gc.strokeLine(cx + W * 0.055, H * 0.500, cx + W * 0.090, H * 0.665); // muslo der.
+
+        // ── PANTORRILLAS (rodilla → tobillo): color propio por lado ────────────
+        gc.setStroke(Color.web(AnatomyPart.LEFT_CALF.getHexColor()));
+        gc.strokeLine(cx - W * 0.090, H * 0.665, cx - W * 0.093, H * 0.825); // pantorrilla izq.
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_CALF.getHexColor()));
+        gc.strokeLine(cx + W * 0.090, H * 0.665, cx + W * 0.093, H * 0.825); // pantorrilla der.
+
+        // ── PIES: color propio por lado ────────────────────────────────────────
+        gc.setStroke(Color.web(AnatomyPart.LEFT_FOOT.getHexColor()));
+        gc.strokeLine(cx - W * 0.093, H * 0.825, cx - W * 0.148, H * 0.843); // pie izq.
+        gc.setStroke(Color.web(AnatomyPart.RIGHT_FOOT.getHexColor()));
+        gc.strokeLine(cx + W * 0.093, H * 0.825, cx + W * 0.148, H * 0.843); // pie der.
+
+        gc.restore();
+
+        // Restablecer grosor y color del lápiz activo tras gc.restore()
+        gc.setLineWidth(effectiveLineWidth);
+        gc.setStroke(Color.web(currentPart.getHexColor()));
+
+        // Marcar el lienzo como no vacío y gestionar stacks de undo/redo
+        canvasHasContent = true;
+        updateCanvasHint();
+        redoStack.clear();
+        saveCurrentState(); // apila el stickman como estado deshacer
+        updateUndoRedoButtons();
+
+        logger.info("[TUTORIAL] Stickman de demostración dibujado ({} × {} px).", (int) W, (int) H);
     }
 
     // ── i18n ──────────────────────────────────────────────────────────────────
@@ -786,6 +972,9 @@ public class DrawingController {
             tutorialOverlay = buildTutorial();
         }
         TutorialOverlay.resetSeen();
+        if (!canvasHasContent) {
+            drawTutorialStickman();
+        }
         tutorialOverlay.show();
     }
 
@@ -975,7 +1164,7 @@ public class DrawingController {
         int rank = 1;
         int delayMs = 0;
         for (ImageResult result : results) {
-            VBox card = buildGalleryCard(result, rank++);
+            HBox card = buildGalleryCard(result, rank++);
             card.setOpacity(0);
             card.setTranslateY(14);
             galleryPane.getChildren().add(card);
@@ -994,38 +1183,195 @@ public class DrawingController {
         logger.info("[GALLERY] {} resultados mostrados", results.size());
     }
 
-    private VBox buildGalleryCard(ImageResult result, int rank) {
-        VBox card = new VBox(5);
-        card.getStyleClass().add("image-card");
-        card.setAlignment(Pos.CENTER);
-        card.setPrefWidth(currentGalleryImageSize + 10);
-        card.setPrefHeight(currentGalleryImageSize + 56);
+    private HBox buildGalleryCard(ImageResult result, int rank) {
+        // ── Tarjeta de imagen (lado izquierdo) ────────────────────────────────
+        VBox imageCard = new VBox(5);
+        imageCard.getStyleClass().add("image-card");
+        imageCard.setAlignment(Pos.CENTER);
+        imageCard.setPrefWidth(currentGalleryImageSize + 10);
+        imageCard.setPrefHeight(currentGalleryImageSize + 56);
 
         Label rankBadge = new Label(String.valueOf(rank));
         rankBadge.getStyleClass().add("gallery-rank");
+
         StackPane imageStack = new StackPane(buildCardImageView(result), rankBadge);
         StackPane.setAlignment(rankBadge, Pos.TOP_LEFT);
+        imageStack.setClip(new Rectangle(currentGalleryImageSize, currentGalleryImageSize));
 
-        card.getChildren().addAll(imageStack, buildScoreLabel(result, rank));
-        card.setCursor(Cursor.HAND);
-        Tooltip.install(card, new Tooltip(buildTooltip(result, rank)));
-        card.setOnMouseClicked(e -> openResultSource(result));
+        imageCard.getChildren().addAll(imageStack, buildScoreLabel(result, rank));
+        imageCard.setCursor(Cursor.HAND);
+        imageCard.setOnMouseClicked(e -> openResultSource(result));
 
-        // Animación hover: levantar la card y volver a su lugar
-        card.setOnMouseEntered(e -> {
-            card.setViewOrder(-1); // renderizar sobre las demás
-            new Timeline(new KeyFrame(Duration.millis(110),
-                new KeyValue(card.translateYProperty(), -5, Interpolator.EASE_OUT)
-            )).play();
+        // ── Panel de análisis (lado derecho, oculto al inicio) ────────────────
+        VBox infoPanel = buildPosePopup(result);
+        infoPanel.setOpacity(0);
+
+        // El wrapper ocupa CERO espacio de layout (para no desplazar el FlowPane),
+        // pero visualmente se renderiza a través del clip, superponiéndose sobre
+        // las tarjetas vecinas. Esto evita el bucle enter/exit del último elemento.
+        StackPane infoPanelWrapper = new StackPane(infoPanel);
+        infoPanelWrapper.setAlignment(javafx.geometry.Pos.TOP_LEFT);
+        infoPanelWrapper.setPrefWidth(0);
+        infoPanelWrapper.setMinWidth(0);
+        infoPanelWrapper.setMaxWidth(0);  // siempre 0 — nunca afecta al layout
+        Rectangle panelClip = new Rectangle(0, 600);
+        infoPanelWrapper.setClip(panelClip);
+
+        // ── Contenedor HBox (ocupa el espacio en el FlowPane) ─────────────────
+        HBox container = new HBox(0, imageCard, infoPanelWrapper);
+        container.setAlignment(javafx.geometry.Pos.TOP_LEFT);
+
+        final double INFO_W = 262.0;
+        // Referencia a la animación activa para poder cancelarla si el ratón
+        // entra/sale rápidamente
+        final Timeline[] active = {null};
+
+        container.setOnMouseEntered(e -> {
+            if (active[0] != null) active[0].stop();
+            container.setViewOrder(-1);  // renderizar por encima de las vecinas
+            double curClip = panelClip.getWidth();
+            double curOp   = infoPanel.getOpacity();
+            double curTY   = imageCard.getTranslateY();
+            Timeline tl = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                    new KeyValue(panelClip.widthProperty(),      curClip),
+                    new KeyValue(infoPanel.opacityProperty(),    curOp),
+                    new KeyValue(imageCard.translateYProperty(), curTY)),
+                new KeyFrame(Duration.millis(210),
+                    new KeyValue(panelClip.widthProperty(),      INFO_W, Interpolator.EASE_OUT),
+                    new KeyValue(infoPanel.opacityProperty(),    1.0,    Interpolator.EASE_OUT),
+                    new KeyValue(imageCard.translateYProperty(), -4.0,   Interpolator.EASE_OUT))
+            );
+            active[0] = tl;
+            tl.play();
         });
-        card.setOnMouseExited(e -> {
-            Timeline drop = new Timeline(new KeyFrame(Duration.millis(110),
-                new KeyValue(card.translateYProperty(), 0, Interpolator.EASE_OUT)
-            ));
-            drop.setOnFinished(ev -> card.setViewOrder(0));
-            drop.play();
+
+        container.setOnMouseExited(e -> {
+            if (active[0] != null) active[0].stop();
+            double curClip = panelClip.getWidth();
+            double curOp   = infoPanel.getOpacity();
+            double curTY   = imageCard.getTranslateY();
+            Timeline tl = new Timeline(
+                new KeyFrame(Duration.ZERO,
+                    new KeyValue(panelClip.widthProperty(),      curClip),
+                    new KeyValue(infoPanel.opacityProperty(),    curOp),
+                    new KeyValue(imageCard.translateYProperty(), curTY)),
+                new KeyFrame(Duration.millis(170),
+                    new KeyValue(panelClip.widthProperty(),      0,   Interpolator.EASE_IN),
+                    new KeyValue(infoPanel.opacityProperty(),    0.0, Interpolator.EASE_IN),
+                    new KeyValue(imageCard.translateYProperty(), 0.0, Interpolator.EASE_OUT))
+            );
+            tl.setOnFinished(ev -> container.setViewOrder(0));
+            active[0] = tl;
+            tl.play();
         });
-        return card;
+
+        return container;
+    }
+
+    /**
+     * Construye el panel de análisis de pose que aparece a la derecha de la
+     * tarjeta al hacer hover, expandiéndose inline y empujando las demás fotos.
+     */
+    private VBox buildPosePopup(ImageResult result) {
+        VBox box = new VBox(8);
+        box.setMinWidth(248);
+        box.setMaxWidth(248);
+        box.setPrefWidth(248);
+        // Mismo fondo oscuro que la tarjeta, borde izquierdo como separador
+        box.setStyle(
+            "-fx-background-color: rgba(10,22,38,0.98);" +
+            "-fx-background-radius: 0 10 10 0;" +
+            "-fx-border-color: rgba(140,195,240,0.30) rgba(140,195,240,0.18) rgba(140,195,240,0.18) rgba(100,160,220,0.45);" +
+            "-fx-border-width: 1 1 1 2;" +
+            "-fx-border-radius: 0 10 10 0;" +
+            "-fx-padding: 14 16 14 14;");
+
+        SimilarityBreakdown bd = result.getScoreBreakdown();
+
+        // ── Título ──────────────────────────────────────────────────────────
+        Label title = new Label(I18n.t("pose.analysis"));
+        title.setStyle("-fx-text-fill: #B8D4EC; -fx-font-size: 12px; -fx-font-weight: bold;");
+        box.getChildren().add(title);
+
+        // ── Separador ───────────────────────────────────────────────────────
+        javafx.scene.layout.Region sep = new javafx.scene.layout.Region();
+        sep.setPrefHeight(1);
+        sep.setMaxWidth(Double.MAX_VALUE);
+        sep.setStyle("-fx-background-color: rgba(140,195,240,0.20);");
+        box.getChildren().add(sep);
+
+        if (bd == null || !bd.hasData()) {
+            Label noData = new Label(I18n.t("pose.nodata"));
+            noData.setStyle("-fx-text-fill: #556677; -fx-font-size: 12px;");
+            box.getChildren().add(noData);
+            return box;
+        }
+
+        // ── Filas de score ───────────────────────────────────────────────────
+        if (bd.hasEmbeddings()) {
+            box.getChildren().add(poseScoreRowLarge(I18n.t("pose.embedding"), bd.cosine(), "#18CC96"));
+        }
+        box.getChildren().add(poseScoreRowLarge(I18n.t("pose.angles"),    bd.angles(),    colorForScore(bd.angles())));
+        if (bd.hasPositions()) {
+            box.getChildren().add(poseScoreRowLarge(I18n.t("pose.positions"), bd.positions(), colorForScore(bd.positions())));
+        }
+        box.getChildren().add(poseScoreRowLarge(I18n.t("pose.skeleton"),  bd.skeleton(),  colorForScore(bd.skeleton())));
+        box.getChildren().add(poseScoreRowLarge(I18n.t("pose.contour"),   bd.contour(),   colorForScore(bd.contour())));
+        if (bd.coverage() < 0.97) {
+            box.getChildren().add(poseScoreRowLarge(I18n.t("pose.coverage"), bd.coverage(), colorForScore(bd.coverage())));
+        }
+
+        // ── Pie: landmarks / joints ─────────────────────────────────────────
+        javafx.scene.layout.Region sep2 = new javafx.scene.layout.Region();
+        sep2.setPrefHeight(1);
+        sep2.setMaxWidth(Double.MAX_VALUE);
+        sep2.setStyle("-fx-background-color: rgba(140,195,240,0.14);");
+        box.getChildren().add(sep2);
+
+        Label pts = new Label("📍 " + bd.landmarkCount() + " " + I18n.t("pose.points")
+                + "   ✏ " + bd.jointCount() + " " + I18n.t("pose.joints"));
+        pts.setStyle("-fx-text-fill: #4A6880; -fx-font-size: 11px;");
+        box.getChildren().add(pts);
+
+        return box;
+    }
+
+    /** Fila de métrica para el popup: [nombre 76px] [barra 84px] [% 38px]. */
+    private HBox poseScoreRowLarge(String name, double score, String color) {
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        Label nameLbl = new Label(name);
+        nameLbl.setMinWidth(76);
+        nameLbl.setStyle("-fx-text-fill: #8AACC4; -fx-font-size: 12px;");
+
+        double pct  = Math.max(0.0, Math.min(1.0, score));
+        double barW = 84.0;
+        javafx.scene.shape.Rectangle bg = new javafx.scene.shape.Rectangle(barW, 7);
+        bg.setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.10)"));
+        bg.setArcWidth(5); bg.setArcHeight(5);
+
+        javafx.scene.shape.Rectangle fill = new javafx.scene.shape.Rectangle(Math.max(3, barW * pct), 7);
+        fill.setFill(javafx.scene.paint.Color.web(color));
+        fill.setArcWidth(5); fill.setArcHeight(5);
+
+        StackPane bar = new StackPane(bg, fill);
+        StackPane.setAlignment(fill, Pos.CENTER_LEFT);
+
+        Label pctLbl = new Label(Math.round(pct * 100) + "%");
+        pctLbl.setStyle("-fx-text-fill: " + color + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        pctLbl.setMinWidth(38);
+
+        row.getChildren().addAll(nameLbl, bar, pctLbl);
+        return row;
+    }
+
+    /** Elige un color tráfico según el score: verde > 0.65, ámbar > 0.45, rojo. */
+    private static String colorForScore(double score) {
+        if (score >= 0.65) return "#7DC9B0";   // teal — bueno
+        if (score >= 0.45) return "#D4A064";   // ámbar — medio
+        return "#E07070";                       // rojo  — bajo
     }
 
     private ImageView buildCardImageView(ImageResult result) {

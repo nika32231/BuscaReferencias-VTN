@@ -216,7 +216,7 @@ public class BuscaReferenciasApp extends Application {
              + " -fx-padding: " + p5 + " " + p4 + " " + p5 + " " + p4 + ";"
              + " -fx-min-height: " + bH + "; }\n"
              + ".section-title { -fx-font-size: " + fs + "px; }\n"
-             + ".palette-button { -fx-font-size: " + f + "px;"
+             + ".palette-pill-button { -fx-font-size: " + f + "px;"
              + " -fx-min-height: " + pH + ";"
              + " -fx-padding: " + qV + " " + qR + " " + qV + " " + qL + "; }\n"
              + ".gallery-rank { -fx-font-size: " + fs + "px; }\n"

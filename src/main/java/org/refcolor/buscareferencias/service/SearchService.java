@@ -2,6 +2,7 @@ package org.refcolor.buscareferencias.service;
 
 import org.refcolor.buscareferencias.model.ImageResult;
 import org.refcolor.buscareferencias.model.PoseData;
+import org.refcolor.buscareferencias.model.SimilarityBreakdown;
 import org.refcolor.buscareferencias.service.MediaPipeService.ImageCacheService;
 import org.refcolor.buscareferencias.utils.LocalImagePaths;
 import org.refcolor.buscareferencias.utils.PoseToleranceConfig;
@@ -138,12 +139,15 @@ public class SearchService {
             }
         }
 
-        // ── Puntuar cacheadas en paralelo (calculateSimilarity es pura / thread-safe) ─
+        // ── Puntuar cacheadas en paralelo (calculateSimilarityWithBreakdown es pura / thread-safe) ─
         final String queryStr = String.join(" ", terms);
         List<ImageResult> cachedHits = toScore.parallelStream()
-                .map(cp -> buildDisplayResult(cp.candidate(),
-                        MediaPipeService.calculateSimilarity(drawingPose, cp.pose()),
-                        cp.pose(), queryStr))
+                .map(cp -> {
+                    SimilarityBreakdown bd = MediaPipeService.calculateSimilarityWithBreakdown(drawingPose, cp.pose());
+                    ImageResult r = buildDisplayResult(cp.candidate(), bd.finalScore(), cp.pose(), queryStr);
+                    r.setScoreBreakdown(bd);
+                    return r;
+                })
                 .collect(Collectors.toList());
 
         // Report progress after instant cached scoring
@@ -209,14 +213,17 @@ public class SearchService {
                         firstNonBlank(candidate.getOriginalUrl(), candidate.getThumbnailUrl(), candidate.getSourcePageUrl()));
                 PoseData imagePose = path != null ? batchPoses.get(path) : null;
                 double score = -1.0;
+                SimilarityBreakdown bd = null;
                 if (imagePose != null && !imagePose.getAllLandmarks().isEmpty()) {
-                    score = MediaPipeService.calculateSimilarity(drawingPose, imagePose);
+                    bd = MediaPipeService.calculateSimilarityWithBreakdown(drawingPose, imagePose);
+                    score = bd.finalScore();
                     logger.info("[SIMILARITY] {} -> {}", String.format("%.4f", score), path);
                 } else {
                     logger.debug("[SEARCH] Sin pose para: {}", path);
                 }
                 ImageResult scored = buildDisplayResult(candidate, score, imagePose, String.join(" ", terms));
                 if (imagePose != null) scored.setPoseData(imagePose);
+                if (bd != null) scored.setScoreBreakdown(bd);
                 allScored.add(scored);
             }
 

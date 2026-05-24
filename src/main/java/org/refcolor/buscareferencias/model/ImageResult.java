@@ -10,6 +10,7 @@ public class ImageResult {
     private final String searchQuery;
     private double score;
     private PoseData poseData;
+    private SimilarityBreakdown scoreBreakdown;
 
     public ImageResult(String thumbnailUrl, String originalUrl, String title, double score) {
         this(thumbnailUrl, thumbnailUrl, originalUrl, title, score, originalUrl, "", "");
@@ -68,5 +69,13 @@ public class ImageResult {
 
     public void setPoseData(PoseData poseData) {
         this.poseData = poseData;
+    }
+
+    public SimilarityBreakdown getScoreBreakdown() {
+        return scoreBreakdown;
+    }
+
+    public void setScoreBreakdown(SimilarityBreakdown scoreBreakdown) {
+        this.scoreBreakdown = scoreBreakdown;
     }
 }

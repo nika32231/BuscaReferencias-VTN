@@ -2,6 +2,7 @@ package org.refcolor.buscareferencias.service;
 
 import org.refcolor.buscareferencias.model.AnatomyPart;
 import org.refcolor.buscareferencias.model.PoseData;
+import org.refcolor.buscareferencias.model.SimilarityBreakdown;
 import org.refcolor.buscareferencias.database.DatabaseManager;
 import org.refcolor.buscareferencias.client.PythonImageSearchClient;
 import org.refcolor.buscareferencias.utils.LocalImagePaths;
@@ -33,15 +34,16 @@ public class MediaPipeService {
     public static class ImageCacheService {
 
         /**
-         * Limpia/reinicia la caché de sesión. startSessionCache y clearSessionCache
-         * eran idénticos — unificados en un solo método (S2).
+         * Limpia/reinicia la caché de sesión al comenzar una nueva búsqueda.
          */
         public static synchronized void startSessionCache() {
             SESSION_POSE_CACHE.clear();
         }
 
+        /** @deprecated Usar {@link #startSessionCache()} */
+        @Deprecated
         public static synchronized void clearSessionCache() {
-            SESSION_POSE_CACHE.clear();
+            startSessionCache();
         }
 
         public static String resolveLocalPath(String imageSource) {
@@ -257,56 +259,83 @@ public class MediaPipeService {
     }
 
     /**
-     * Calcula la similitud final combinando varios componentes reales.
-     * Fórmula base: 0.45 cosine + 0.25 pose angles + 0.20 skeleton + 0.10 contour
-     * Si no hay embeddings, redistribuye los pesos: 0.50 pose angles + 0.35 skeleton + 0.15 contour
+     * Calcula la similitud final y devuelve el desglose completo de componentes.
+     *
+     * <p>Fórmula con embeddings:  0.40·cosine + 0.35·angles + 0.17·skeleton + 0.08·contour<br>
+     * Sin embeddings:            0.60·angles + 0.30·skeleton + 0.10·contour</p>
      */
-    public static double calculateSimilarity(PoseData drawingPose, PoseData imagePose) {
-        if (imagePose == null || drawingPose == null) return 0.0;
-        if (imagePose.getAllLandmarks().isEmpty() || drawingPose.getAllJoints().isEmpty()) return 0.0;
+    public static SimilarityBreakdown calculateSimilarityWithBreakdown(PoseData drawingPose, PoseData imagePose) {
+        if (imagePose == null || drawingPose == null
+                || imagePose.getAllLandmarks().isEmpty() || drawingPose.getAllJoints().isEmpty()) {
+            return SimilarityBreakdown.EMPTY;
+        }
 
-        int jointCount = drawingPose.getAllJoints().size();
-        double partial = calculatePartialDrawingSimilarity(drawingPose, imagePose);
-        double headSim = headOnlySimilarity(drawingPose.getAllJoints(), imagePose.getAllLandmarks());
+        int jointCount    = drawingPose.getAllJoints().size();
+        int landmarkCount = imagePose.getAllLandmarks().size();
 
-        double cosine = calculateCosineSimilarity(drawingPose.getEmbedding(), imagePose.getEmbedding());
-        double angles = calculateAngleBasedSimilarity(drawingPose, imagePose);
-        double skeleton = calculateSkeletonSimilarity(drawingPose, imagePose);
-        double contour = calculateContourSimilarity(drawingPose, imagePose);
-
-        double coverageFactor = calculateCoverageFactor(drawingPose, imagePose);
+        double partial    = calculatePartialDrawingSimilarity(drawingPose, imagePose);
+        double headSim    = headOnlySimilarity(drawingPose.getAllJoints(), imagePose.getAllLandmarks());
+        double cosine     = calculateCosineSimilarity(drawingPose.getEmbedding(), imagePose.getEmbedding());
+        double angles     = calculateAngleBasedSimilarity(drawingPose, imagePose);
+        double positions  = scoreEndpointPositions2D(drawingPose, imagePose);  // -1 si no aplica
+        double skeleton   = calculateSkeletonSimilarity(drawingPose, imagePose);
+        double contour    = calculateContourSimilarity(drawingPose, imagePose);
+        double coverage   = calculateCoverageFactor(drawingPose, imagePose);
 
         boolean hasEmbeddings = cosine > 0.0;
         double finalScore = computeWeightedScore(
-                jointCount, hasEmbeddings, partial, headSim, cosine, angles, skeleton, contour, coverageFactor);
+                jointCount, hasEmbeddings, partial, headSim, cosine, angles, positions, skeleton, contour, coverage);
         finalScore = Math.max(0.0, Math.min(1.0, finalScore));
-        logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} skeleton={} contour={} coverage={} final={}",
+
+        logger.info("[SIMILARITY] joints={} partial={} head={} cosine={} angles={} pos={} skeleton={} contour={} coverage={} final={}",
                 jointCount,
-                String.format("%.4f", partial), String.format("%.4f", headSim),
-                String.format("%.4f", cosine), String.format("%.4f", angles),
-                String.format("%.4f", skeleton), String.format("%.4f", contour),
-                String.format("%.4f", coverageFactor),
+                String.format("%.4f", partial),   String.format("%.4f", headSim),
+                String.format("%.4f", cosine),    String.format("%.4f", angles),
+                String.format("%.4f", positions), String.format("%.4f", skeleton),
+                String.format("%.4f", contour),   String.format("%.4f", coverage),
                 String.format("%.4f", finalScore));
-        return finalScore;
+
+        return new SimilarityBreakdown(cosine, angles, positions, skeleton, contour, coverage,
+                finalScore, hasEmbeddings, jointCount, landmarkCount);
     }
 
     /**
-     * Selecciona la fórmula de puntuación según el tipo de dibujo y disponibilidad de embeddings.
-     * Aplica "early return" para evitar if-else anidados.
+     * Calcula la similitud final (solo el score, sin desglose).
+     * Para obtener el desglose completo usa {@link #calculateSimilarityWithBreakdown}.
+     */
+    public static double calculateSimilarity(PoseData drawingPose, PoseData imagePose) {
+        return calculateSimilarityWithBreakdown(drawingPose, imagePose).finalScore();
+    }
+
+    /**
+     * Selecciona la fórmula de puntuación según el tipo de dibujo y disponibilidad de componentes.
+     *
+     * <p>Si {@code positions >= 0} (el dibujo tiene manos/pies), se incluye como
+     * componente separado con peso propio. Si {@code positions == -1.0} (sin extremidades),
+     * su peso se redistribuye al esqueleto para no penalizar dibujos parciales.</p>
      */
     private static double computeWeightedScore(
             int jointCount, boolean hasEmbeddings,
             double partial, double headSim, double cosine,
-            double angles, double skeleton, double contour,
+            double angles, double positions, double skeleton, double contour,
             double coverageFactor) {
         if (jointCount <= 4) {
             // Dibujo parcial (p. ej. solo cabeza): posición y cobertura
             return Math.max(partial, headSim) * coverageFactor;
         }
+        boolean hasPos = positions >= 0.0;
+        double score;
         if (hasEmbeddings) {
-            return ((0.45 * cosine) + (0.25 * angles) + (0.20 * skeleton) + (0.10 * contour)) * coverageFactor;
+            // Con embedding: cosine captura la pose global; ángulos y posición discriminan extremidades
+            score = (0.35 * cosine) + (0.28 * angles)
+                  + (hasPos ? 0.15 * positions + 0.14 * skeleton : 0.30 * skeleton)
+                  + 0.08 * contour;
+        } else {
+            // Sin embedding: ángulos + posición son los discriminadores principales
+            score = (0.48 * angles)
+                  + (hasPos ? 0.17 * positions + 0.25 * skeleton : 0.42 * skeleton)
+                  + 0.10 * contour;
         }
-        double score = (0.50 * angles) + (0.35 * skeleton) + (0.15 * contour);
         score = Math.max(score, partial * 0.25);
         return score * coverageFactor;
     }
@@ -350,16 +379,21 @@ public class MediaPipeService {
     private static java.util.Set<String> getDrawingRegions(java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints) {
         java.util.Set<String> regions = new java.util.HashSet<>();
         if (joints.containsKey(AnatomyPart.HEAD)) regions.add("HEAD");
-        if (joints.containsKey(AnatomyPart.TORSO)) regions.add("UPPER");
-        if (joints.containsKey(AnatomyPart.ARMS)     || joints.containsKey(AnatomyPart.FOREARMS)    || joints.containsKey(AnatomyPart.HANDS)
-         || joints.containsKey(AnatomyPart.LEFT_ARM)  || joints.containsKey(AnatomyPart.RIGHT_ARM)
+        if (joints.containsKey(AnatomyPart.TORSO)
+         || joints.containsKey(AnatomyPart.SHOULDERS)
+         || joints.containsKey(AnatomyPart.LEFT_SHOULDER) || joints.containsKey(AnatomyPart.RIGHT_SHOULDER))
+            regions.add("UPPER");
+        if (joints.containsKey(AnatomyPart.ARMS)        || joints.containsKey(AnatomyPart.FOREARMS)      || joints.containsKey(AnatomyPart.HANDS)
+         || joints.containsKey(AnatomyPart.LEFT_ARM)     || joints.containsKey(AnatomyPart.RIGHT_ARM)
          || joints.containsKey(AnatomyPart.LEFT_FOREARM) || joints.containsKey(AnatomyPart.RIGHT_FOREARM)
-         || joints.containsKey(AnatomyPart.LEFT_HAND) || joints.containsKey(AnatomyPart.RIGHT_HAND))
+         || joints.containsKey(AnatomyPart.LEFT_HAND)    || joints.containsKey(AnatomyPart.RIGHT_HAND))
             regions.add("ARMS");
-        if (joints.containsKey(AnatomyPart.THIGHS)   || joints.containsKey(AnatomyPart.CALVES)      || joints.containsKey(AnatomyPart.FEET)
-         || joints.containsKey(AnatomyPart.LEFT_THIGH)|| joints.containsKey(AnatomyPart.RIGHT_THIGH)
-         || joints.containsKey(AnatomyPart.LEFT_CALF) || joints.containsKey(AnatomyPart.RIGHT_CALF)
-         || joints.containsKey(AnatomyPart.LEFT_FOOT) || joints.containsKey(AnatomyPart.RIGHT_FOOT))
+        if (joints.containsKey(AnatomyPart.HIPS)
+         || joints.containsKey(AnatomyPart.LEFT_HIP)     || joints.containsKey(AnatomyPart.RIGHT_HIP)
+         || joints.containsKey(AnatomyPart.THIGHS)       || joints.containsKey(AnatomyPart.CALVES)        || joints.containsKey(AnatomyPart.FEET)
+         || joints.containsKey(AnatomyPart.LEFT_THIGH)   || joints.containsKey(AnatomyPart.RIGHT_THIGH)
+         || joints.containsKey(AnatomyPart.LEFT_CALF)    || joints.containsKey(AnatomyPart.RIGHT_CALF)
+         || joints.containsKey(AnatomyPart.LEFT_FOOT)    || joints.containsKey(AnatomyPart.RIGHT_FOOT))
             regions.add("LOWER");
         return regions;
     }
@@ -387,32 +421,72 @@ public class MediaPipeService {
         return Math.max(0.1, 1.0 - penalty);
     }
 
+    /**
+     * Mapea cada joint dibujado al/los landmark(s) de MediaPipe con los que
+     * debe compararse posicionalmente.
+     *
+     * <p><b>Regla general para segmentos:</b> los joints dibujados como líneas
+     * son el CENTROIDE de los píxeles del trazo, que coincide con el punto
+     * MEDIO del segmento. Por tanto cada joint de segmento se compara contra
+     * el promedio de los dos landmarks que delimitan ese segmento:</p>
+     * <ul>
+     *   <li>LEFT_ARM (trazo hombro→codo) → media(LM11, LM13) = punto medio del húmero</li>
+     *   <li>LEFT_FOREARM (trazo codo→muñeca) → media(LM13, LM15) = punto medio del radio</li>
+     *   <li>LEFT_THIGH (trazo cadera→rodilla) → media(LM23, LM25)</li>
+     *   <li>LEFT_CALF (trazo rodilla→tobillo) → media(LM25, LM27)</li>
+     * </ul>
+     *
+     * <p><b>Joints de punto exacto</b> (SHOULDERS y HIPS): se dibujan como
+     * círculos rellenos sobre la articulación → se comparan contra el landmark
+     * exacto (LM11/LM12 para hombros; LM23/LM24 para caderas).</p>
+     */
     private static java.util.Map<AnatomyPart, Integer[]> partToLandmarkIds() {
         java.util.Map<AnatomyPart, Integer[]> mapping = new java.util.HashMap<>();
+
         // ── No bilaterales ────────────────────────────────────────────────────
-        mapping.put(AnatomyPart.HEAD, new Integer[]{0});
-        // ── Splits bilaterales: cada lado con su landmark específico ──────────
-        // Esto permite comparar brazo izquierdo dibujado con landmark izquierdo
-        // de MediaPipe (no con el promedio de ambos lados).
-        mapping.put(AnatomyPart.LEFT_ARM,      new Integer[]{11}); // hombro izq.
-        mapping.put(AnatomyPart.RIGHT_ARM,     new Integer[]{12}); // hombro der.
-        mapping.put(AnatomyPart.LEFT_FOREARM,  new Integer[]{13}); // codo izq.
-        mapping.put(AnatomyPart.RIGHT_FOREARM, new Integer[]{14}); // codo der.
-        mapping.put(AnatomyPart.LEFT_HAND,     new Integer[]{15}); // muñeca izq.
-        mapping.put(AnatomyPart.RIGHT_HAND,    new Integer[]{16}); // muñeca der.
-        mapping.put(AnatomyPart.LEFT_THIGH,    new Integer[]{23}); // cadera izq.
-        mapping.put(AnatomyPart.RIGHT_THIGH,   new Integer[]{24}); // cadera der.
-        mapping.put(AnatomyPart.LEFT_CALF,     new Integer[]{25}); // rodilla izq.
-        mapping.put(AnatomyPart.RIGHT_CALF,    new Integer[]{26}); // rodilla der.
-        mapping.put(AnatomyPart.LEFT_FOOT,     new Integer[]{27}); // tobillo izq.
-        mapping.put(AnatomyPart.RIGHT_FOOT,    new Integer[]{28}); // tobillo der.
-        // ── Centroides combinados (fallback cuando no hay split bilateral) ─────
+        mapping.put(AnatomyPart.HEAD,  new Integer[]{0});
+        // TORSO: centroide de la línea columna ≈ punto medio hombros-caderas
+        mapping.put(AnatomyPart.TORSO, new Integer[]{11, 12, 23, 24});
+
+        // ── Hombros y caderas: puntos exactos de articulación ─────────────────
+        mapping.put(AnatomyPart.LEFT_SHOULDER,  new Integer[]{11});
+        mapping.put(AnatomyPart.RIGHT_SHOULDER, new Integer[]{12});
+        mapping.put(AnatomyPart.LEFT_HIP,       new Integer[]{23});
+        mapping.put(AnatomyPart.RIGHT_HIP,      new Integer[]{24});
+        // Centroides combinados (si no se activó bilateral)
+        mapping.put(AnatomyPart.SHOULDERS, new Integer[]{11, 12});
+        mapping.put(AnatomyPart.HIPS,      new Integer[]{23, 24});
+
+        // ── Brazos: centroide de segmento = punto medio del hueso ─────────────
+        //   LEFT_ARM (hombro→codo) → media(LM11=hombro, LM13=codo)
+        mapping.put(AnatomyPart.LEFT_ARM,      new Integer[]{11, 13});
+        mapping.put(AnatomyPart.RIGHT_ARM,     new Integer[]{12, 14});
+        //   LEFT_FOREARM (codo→muñeca) → media(LM13=codo, LM15=muñeca)
+        mapping.put(AnatomyPart.LEFT_FOREARM,  new Integer[]{13, 15});
+        mapping.put(AnatomyPart.RIGHT_FOREARM, new Integer[]{14, 16});
+        //   LEFT_HAND: pequeño óvalo cerca de la muñeca
+        mapping.put(AnatomyPart.LEFT_HAND,     new Integer[]{15});
+        mapping.put(AnatomyPart.RIGHT_HAND,    new Integer[]{16});
+        // Centroides combinados
         mapping.put(AnatomyPart.ARMS,     new Integer[]{11, 12});
         mapping.put(AnatomyPart.FOREARMS, new Integer[]{13, 14});
         mapping.put(AnatomyPart.HANDS,    new Integer[]{15, 16});
-        mapping.put(AnatomyPart.THIGHS,   new Integer[]{23, 24});
-        mapping.put(AnatomyPart.CALVES,   new Integer[]{25, 26});
-        mapping.put(AnatomyPart.FEET,     new Integer[]{27, 28});
+
+        // ── Piernas: centroide de segmento = punto medio del hueso ────────────
+        //   LEFT_THIGH (cadera→rodilla) → media(LM23=cadera, LM25=rodilla)
+        mapping.put(AnatomyPart.LEFT_THIGH,  new Integer[]{23, 25});
+        mapping.put(AnatomyPart.RIGHT_THIGH, new Integer[]{24, 26});
+        //   LEFT_CALF (rodilla→tobillo) → media(LM25=rodilla, LM27=tobillo)
+        mapping.put(AnatomyPart.LEFT_CALF,   new Integer[]{25, 27});
+        mapping.put(AnatomyPart.RIGHT_CALF,  new Integer[]{26, 28});
+        //   LEFT_FOOT: línea corta desde el tobillo
+        mapping.put(AnatomyPart.LEFT_FOOT,   new Integer[]{27});
+        mapping.put(AnatomyPart.RIGHT_FOOT,  new Integer[]{28});
+        // Centroides combinados
+        mapping.put(AnatomyPart.THIGHS, new Integer[]{23, 24});
+        mapping.put(AnatomyPart.CALVES, new Integer[]{25, 26});
+        mapping.put(AnatomyPart.FEET,   new Integer[]{27, 28});
+
         return mapping;
     }
 
@@ -434,17 +508,30 @@ public class MediaPipeService {
         return new javafx.geometry.Point2D(sumX / found, sumY / found);
     }
 
+    /**
+     * Centro corporal del dibujo para normalización de posiciones.
+     * Misma prioridad que MediaPipe usa en la imagen (caderas → torso → centroide).
+     */
+    private static javafx.geometry.Point2D findDrawCenter(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints) {
+        if (joints.containsKey(AnatomyPart.LEFT_HIP) && joints.containsKey(AnatomyPart.RIGHT_HIP))
+            return new javafx.geometry.Point2D(
+                    (joints.get(AnatomyPart.LEFT_HIP).getX() + joints.get(AnatomyPart.RIGHT_HIP).getX()) / 2.0,
+                    (joints.get(AnatomyPart.LEFT_HIP).getY() + joints.get(AnatomyPart.RIGHT_HIP).getY()) / 2.0);
+        if (joints.containsKey(AnatomyPart.LEFT_HIP))  return joints.get(AnatomyPart.LEFT_HIP);
+        if (joints.containsKey(AnatomyPart.RIGHT_HIP)) return joints.get(AnatomyPart.RIGHT_HIP);
+        if (joints.containsKey(AnatomyPart.HIPS))      return joints.get(AnatomyPart.HIPS);
+        javafx.geometry.Point2D torso = joints.get(AnatomyPart.TORSO);
+        return torso != null ? torso : estimateJointCenter(joints);
+    }
+
     private static double calculateSkeletonSimilarity(PoseData drawingPose, PoseData imagePose) {
         try {
             var joints = drawingPose.getAllJoints();
             var lm = imagePose.getAllLandmarks();
 
-            javafx.geometry.Point2D drawCenter = joints.get(org.refcolor.buscareferencias.model.AnatomyPart.TORSO);
-            if (drawCenter == null) {
-                drawCenter = estimateJointCenter(joints);
-            }
-
-            javafx.geometry.Point2D imgCenter = findImageCenter(lm);
+            javafx.geometry.Point2D drawCenter = findDrawCenter(joints);
+            javafx.geometry.Point2D imgCenter  = findImageCenter(lm);
 
             if (drawCenter == null || imgCenter == null) {
                 return headOnlySimilarity(joints, lm);
@@ -458,6 +545,7 @@ public class MediaPipeService {
             java.util.Map<org.refcolor.buscareferencias.model.AnatomyPart, Integer[]> mapping = partToLandmarkIds();
 
             double total = 0.0;
+            double totalWeight = 0.0;
             int counted = 0;
             for (var entry : mapping.entrySet()) {
                 var part = entry.getKey();
@@ -475,19 +563,94 @@ public class MediaPipeService {
                 double dist = Math.hypot(ndx - nix, ndy - niy);
                 double tolerance = PoseToleranceConfig.skeletonTolerance(part);
                 double sim = Math.max(0.0, 1.0 - (dist / tolerance));
-                total += sim;
+                // Las extremidades (brazos, manos, pies) ponderan más que torso/caderas
+                double pw = getSkeletonPartWeight(part);
+                total += sim * pw;
+                totalWeight += pw;
                 counted++;
             }
             if (counted == 0) {
                 return headOnlySimilarity(joints, lm);
             }
-            double similarity = total / counted;
+            double similarity = total / totalWeight;
             similarity *= Math.min(1.0, Math.max(0.35, counted / 8.0));
             return similarity;
         } catch (Exception e) {
             logger.debug("Error calculating skeleton similarity: {}", e.toString());
             return 0.0;
         }
+    }
+
+    /**
+     * Score de posición 2D de extremidades: compara dónde están las manos y pies
+     * en el espacio corporal normalizado (X e Y respecto al centro, escalado por torso).
+     *
+     * <p>Complementa a los scorers de ángulo (que comparan la DIRECCIÓN de los segmentos)
+     * capturando SI las extremidades están en el cuadrante correcto del cuerpo:
+     * mano izquierda arriba vs. mano izquierda a la derecha del cuerpo, etc.</p>
+     *
+     * @return score en [0,1], o {@code -1.0} si el dibujo no tiene ninguna extremidad.
+     */
+    private static double scoreEndpointPositions2D(PoseData drawingPose, PoseData imagePose) {
+        var joints = drawingPose.getAllJoints();
+        var lm     = imagePose.getAllLandmarks();
+
+        javafx.geometry.Point2D drawCenter = findDrawCenter(joints);
+        if (drawCenter == null) return -1.0;
+        double drawScale = estimateDrawScale(joints, drawCenter);
+        if (drawScale <= 0) drawScale = 0.15;
+
+        javafx.geometry.Point2D imgCenter = findImageCenter(lm);
+        if (imgCenter == null) return -1.0;
+        double imgScale = estimateImageScale(lm, imgCenter);
+        if (imgScale <= 0) imgScale = 0.15;
+
+        // Pares: joint del dibujo → landmark MediaPipe correspondiente al extremo
+        record Pair(AnatomyPart part, int lmId) {}
+        var endpoints = java.util.List.of(
+                new Pair(AnatomyPart.LEFT_HAND,  15),
+                new Pair(AnatomyPart.RIGHT_HAND, 16),
+                new Pair(AnatomyPart.LEFT_FOOT,  27),
+                new Pair(AnatomyPart.RIGHT_FOOT, 28));
+
+        double totalScore = 0;
+        int counted = 0;
+        final double tolerance = 1.0;  // 1 longitud de torso (escalada) de tolerancia
+
+        for (var ep : endpoints) {
+            if (!joints.containsKey(ep.part()) || !lm.containsKey(ep.lmId())) continue;
+            javafx.geometry.Point2D drawP = joints.get(ep.part());
+            javafx.geometry.Point2D imgP  = lm.get(ep.lmId());
+
+            // Normalizar por centro y escala propios de cada fuente (dibujo / imagen)
+            double ndx = (drawP.getX() - drawCenter.getX()) / drawScale;
+            double ndy = (drawP.getY() - drawCenter.getY()) / drawScale;
+            double nix = (imgP.getX()  - imgCenter.getX())  / imgScale;
+            double niy = (imgP.getY()  - imgCenter.getY())  / imgScale;
+
+            double dist = Math.hypot(ndx - nix, ndy - niy);
+            totalScore += Math.max(0.0, 1.0 - (dist / tolerance));
+            counted++;
+        }
+
+        return counted > 0 ? totalScore / counted : -1.0;
+    }
+
+    /**
+     * Peso de cada parte en la similitud de esqueleto.
+     * Las extremidades (brazos, manos, pies) ponderan más: un brazo en posición
+     * incorrecta debe bajar más el score que la cabeza ligeramente desplazada.
+     */
+    private static double getSkeletonPartWeight(AnatomyPart part) {
+        return switch (part) {
+            case ARMS,      LEFT_ARM,      RIGHT_ARM      -> 2.0;
+            case FOREARMS,  LEFT_FOREARM,  RIGHT_FOREARM  -> 2.0;
+            case HANDS,     LEFT_HAND,     RIGHT_HAND     -> 2.5;
+            case THIGHS,    LEFT_THIGH,    RIGHT_THIGH    -> 1.5;
+            case CALVES,    LEFT_CALF,     RIGHT_CALF     -> 1.5;
+            case FEET,      LEFT_FOOT,     RIGHT_FOOT     -> 1.5;
+            default -> 1.0;   // HEAD, TORSO, SHOULDERS, HIPS y splits internos
+        };
     }
 
     private static double headOnlySimilarity(
@@ -539,33 +702,73 @@ public class MediaPipeService {
         return new javafx.geometry.Point2D(sx / n, sy / n);
     }
 
+    /**
+     * Estima la escala del dibujo para la normalización del esqueleto.
+     *
+     * <p>Prioridad de referencia (de más a menos precisa):</p>
+     * <ol>
+     *   <li>LEFT_SHOULDER ↔ LEFT_HIP — misma referencia que MediaPipe usa en imagen</li>
+     *   <li>RIGHT_SHOULDER ↔ RIGHT_HIP — idem lado derecho</li>
+     *   <li>SHOULDERS ↔ HIPS — centroides combinados</li>
+     *   <li>HEAD ↔ TORSO — fallback heredado</li>
+     *   <li>Distancia máxima al centro — último recurso</li>
+     * </ol>
+     */
     private static double estimateDrawScale(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
             javafx.geometry.Point2D center) {
-        if (joints.containsKey(AnatomyPart.HEAD) && joints.containsKey(AnatomyPart.TORSO)) {
+        // Prioridad 1: bilateral hombro-cadera (misma referencia que la imagen)
+        if (joints.containsKey(AnatomyPart.LEFT_SHOULDER) && joints.containsKey(AnatomyPart.LEFT_HIP))
+            return joints.get(AnatomyPart.LEFT_SHOULDER).distance(joints.get(AnatomyPart.LEFT_HIP));
+        if (joints.containsKey(AnatomyPart.RIGHT_SHOULDER) && joints.containsKey(AnatomyPart.RIGHT_HIP))
+            return joints.get(AnatomyPart.RIGHT_SHOULDER).distance(joints.get(AnatomyPart.RIGHT_HIP));
+        // Prioridad 2: centroides combinados hombros-caderas
+        if (joints.containsKey(AnatomyPart.SHOULDERS) && joints.containsKey(AnatomyPart.HIPS))
+            return joints.get(AnatomyPart.SHOULDERS).distance(joints.get(AnatomyPart.HIPS));
+        // Prioridad 3: cabeza-torso (fallback)
+        if (joints.containsKey(AnatomyPart.HEAD) && joints.containsKey(AnatomyPart.TORSO))
             return joints.get(AnatomyPart.HEAD).distance(joints.get(AnatomyPart.TORSO));
-        }
         double maxDist = 0.0;
-        for (var p : joints.values()) {
-            maxDist = Math.max(maxDist, p.distance(center));
-        }
+        for (var p : joints.values()) maxDist = Math.max(maxDist, p.distance(center));
         return maxDist;
     }
 
+    /**
+     * Estima la escala de la imagen para la normalización del esqueleto.
+     *
+     * <p>Usa la misma referencia anatómica que {@link #estimateDrawScale}:
+     * distancia hombro ↔ cadera del mismo lado. Esto garantiza que dibujo e imagen
+     * queden normalizados en la misma escala y sus posiciones sean comparables.</p>
+     */
     private static double estimateImageScale(
             java.util.Map<Integer, javafx.geometry.Point2D> lm,
             javafx.geometry.Point2D center) {
+        // Prioridad 1: hombro izq ↔ cadera izq (misma referencia que el dibujo)
+        if (lm.containsKey(11) && lm.containsKey(23))
+            return lm.get(11).distance(lm.get(23));
+        // Prioridad 2: hombro der ↔ cadera der
+        if (lm.containsKey(12) && lm.containsKey(24))
+            return lm.get(12).distance(lm.get(24));
+        // Prioridad 3: promedio hombros ↔ promedio caderas
+        if ((lm.containsKey(11) || lm.containsKey(12)) && (lm.containsKey(23) || lm.containsKey(24))) {
+            javafx.geometry.Point2D sh = averageLandmark(lm,
+                    lm.containsKey(11) && lm.containsKey(12) ? new Integer[]{11,12}
+                    : lm.containsKey(11) ? new Integer[]{11} : new Integer[]{12});
+            javafx.geometry.Point2D hip = averageLandmark(lm,
+                    lm.containsKey(23) && lm.containsKey(24) ? new Integer[]{23,24}
+                    : lm.containsKey(23) ? new Integer[]{23} : new Integer[]{24});
+            if (sh != null && hip != null) return sh.distance(hip);
+        }
+        // Fallback: cabeza ↔ hombros (legacy)
         if (lm.containsKey(0) && (lm.containsKey(11) || lm.containsKey(12))) {
             javafx.geometry.Point2D shoulder = lm.containsKey(11) && lm.containsKey(12)
                     ? new javafx.geometry.Point2D((lm.get(11).getX() + lm.get(12).getX()) / 2.0,
-                    (lm.get(11).getY() + lm.get(12).getY()) / 2.0)
+                      (lm.get(11).getY() + lm.get(12).getY()) / 2.0)
                     : lm.getOrDefault(11, lm.get(12));
             return lm.get(0).distance(shoulder);
         }
         double maxDist = 0.0;
-        for (var p : lm.values()) {
-            maxDist = Math.max(maxDist, p.distance(center));
-        }
+        for (var p : lm.values()) maxDist = Math.max(maxDist, p.distance(center));
         return maxDist;
     }
 
@@ -611,8 +814,18 @@ public class MediaPipeService {
     }
 
     /**
-     * Combina 4 componentes de similitud angular (torso, brazos, manos arriba, piernas).
-     * Cada scorer devuelve double[]{score, weight}; si no aplica, devuelve {0, 0}.
+     * Combina 7 componentes de similitud angular para mayor precisión.
+     * Cada scorer devuelve double[]{score×weight, weight}; si no aplica, devuelve {0, 0}.
+     *
+     * <ul>
+     *   <li>torso tilt        — cabeza respecto a hombros (w=3.0)</li>
+     *   <li>arm angle         — dirección hombro→codo     (w=2.0)</li>
+     *   <li>forearm angle     — dirección codo→muñeca     (w=1.5) ★ nuevo</li>
+     *   <li>hands raised      — altura de manos (continuo, bilateral) (w=2.0)</li>
+     *   <li>leg angle         — dirección cadera→rodilla  (w=1.5)</li>
+     *   <li>calf angle        — dirección rodilla→tobillo (w=1.0) ★ nuevo</li>
+     *   <li>stance width      — separación de pies normalizada (w=1.0) ★ nuevo</li>
+     * </ul>
      */
     private static double calculateAngleBasedSimilarity(PoseData drawingPose, PoseData imagePose) {
         var joints = drawingPose.getAllJoints();
@@ -622,8 +835,11 @@ public class MediaPipeService {
         for (double[] c : new double[][]{
                 scoreTorsoTilt(joints, lm),
                 scoreArmAngle(joints, lm),
+                scoreForearmAngle(joints, lm),
                 scoreHandsRaised(joints, lm),
-                scoreLegAngle(joints, lm)}) {
+                scoreLegAngle(joints, lm),
+                scoreCalfAngle(joints, lm),
+                scoreStanceWidth(joints, lm)}) {
             totalScore  += c[0];
             totalWeight += c[1];
         }
@@ -650,12 +866,15 @@ public class MediaPipeService {
     /**
      * Compara la dirección del brazo en el dibujo con la del brazo en la foto.
      *
-     * <p>Con detección bilateral (LEFT_ARM + LEFT_FOREARM disponibles), compara el
-     * vector hombro→codo de cada lado por separado con el landmark correspondiente
-     * de MediaPipe. Esto discrimina correctamente una T-pose (brazos horizontales)
-     * de brazos caídos (verticales), algo que el ángulo de codo clásico no captura.</p>
+     * <p><b>Modo óptimo (con SHOULDER joints)</b>: usa el joint de hombro exacto
+     * ({@code LEFT_SHOULDER}) como origen y el joint de antebrazo ({@code LEFT_FOREARM})
+     * como destino. Esto compara la dirección hombro→codo en drawing e imagen usando
+     * la misma referencia anatómica (hombro = LM 11, codo = LM 13).</p>
      *
-     * <p>Sin bilateral (joints combinados), usa el método heredado de ángulo de codo.</p>
+     * <p><b>Modo bilateral sin hombros</b>: usa el centroide del brazo superior
+     * ({@code LEFT_ARM}) como proxy del hombro, con la misma dirección a imagen.</p>
+     *
+     * <p><b>Fallback sin bilateral</b>: ángulo de codo clásico con joints combinados.</p>
      */
     private static double[] scoreArmAngle(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
@@ -664,7 +883,26 @@ public class MediaPipeService {
         double totalScore = 0;
         int counted = 0;
 
-        // ── Bilateral: comparación por dirección vectorial hombro→codo ──────
+        // ── Modo óptimo: LEFT_SHOULDER → LEFT_FOREARM vs LM11 → LM13 ─────────
+        // El joint SHOULDER está en la articulación exacta (igual que LM11),
+        // por lo que el vector dibujo ≈ vector imagen para cualquier pose.
+        if (joints.containsKey(AnatomyPart.LEFT_SHOULDER) && joints.containsKey(AnatomyPart.LEFT_FOREARM)
+                && lm.containsKey(11) && lm.containsKey(13)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_SHOULDER), joints.get(AnatomyPart.LEFT_FOREARM));
+            double imgDir  = vectorAngleDeg(lm.get(11), lm.get(13));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_SHOULDER) && joints.containsKey(AnatomyPart.RIGHT_FOREARM)
+                && lm.containsKey(12) && lm.containsKey(14)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_SHOULDER), joints.get(AnatomyPart.RIGHT_FOREARM));
+            double imgDir  = vectorAngleDeg(lm.get(12), lm.get(14));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 2.0, 2.0};
+
+        // ── Bilateral sin hombros: LEFT_ARM (centroide) → LEFT_FOREARM ────────
         if (joints.containsKey(AnatomyPart.LEFT_ARM) && joints.containsKey(AnatomyPart.LEFT_FOREARM)
                 && lm.containsKey(11) && lm.containsKey(13)) {
             double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_ARM), joints.get(AnatomyPart.LEFT_FOREARM));
@@ -679,9 +917,7 @@ public class MediaPipeService {
             totalScore += angleMatchScore(drawDir, imgDir, tolerance);
             counted++;
         }
-        if (counted > 0) {
-            return new double[]{(totalScore / counted) * 2.0, 2.0};
-        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 2.0, 2.0};
 
         // ── Fallback: joints combinados (sin detección bilateral) ────────────
         if (!joints.containsKey(AnatomyPart.TORSO)
@@ -699,25 +935,124 @@ public class MediaPipeService {
         return best > 0 ? new double[]{best * 2.0, 2.0} : new double[]{0, 0};
     }
 
+    /**
+     * Compara la dirección del antebrazo (codo→muñeca) en el dibujo con la de la foto.
+     *
+     * <p><b>Modo óptimo (bilateral)</b>: usa el centroide del antebrazo dibujado
+     * ({@code LEFT_FOREARM}) como origen y la muñeca ({@code LEFT_HAND}) como destino.
+     * Esto equivale a la dirección LM13→LM15 en la imagen.</p>
+     *
+     * <p><b>Fallback combinado</b>: usa {@code FOREARMS→HANDS} si no hay bilaterales.</p>
+     */
+    private static double[] scoreForearmAngle(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        double tolerance = PoseToleranceConfig.armAngleTolerance();
+        double totalScore = 0;
+        int counted = 0;
+
+        // ── Bilateral: LEFT_FOREARM → LEFT_HAND vs LM13 → LM15 ──────────────
+        if (joints.containsKey(AnatomyPart.LEFT_FOREARM) && joints.containsKey(AnatomyPart.LEFT_HAND)
+                && lm.containsKey(13) && lm.containsKey(15)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_FOREARM), joints.get(AnatomyPart.LEFT_HAND));
+            double imgDir  = vectorAngleDeg(lm.get(13), lm.get(15));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_FOREARM) && joints.containsKey(AnatomyPart.RIGHT_HAND)
+                && lm.containsKey(14) && lm.containsKey(16)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_FOREARM), joints.get(AnatomyPart.RIGHT_HAND));
+            double imgDir  = vectorAngleDeg(lm.get(14), lm.get(16));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 1.5, 1.5};
+
+        // ── Fallback: combinado FOREARMS → HANDS ─────────────────────────────
+        if (joints.containsKey(AnatomyPart.FOREARMS) && joints.containsKey(AnatomyPart.HANDS)
+                && (lm.containsKey(13) || lm.containsKey(14))
+                && (lm.containsKey(15) || lm.containsKey(16))) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.FOREARMS), joints.get(AnatomyPart.HANDS));
+            double best = 0;
+            if (lm.containsKey(13) && lm.containsKey(15))
+                best = Math.max(best, angleMatchScore(drawDir, vectorAngleDeg(lm.get(13), lm.get(15)), tolerance));
+            if (lm.containsKey(14) && lm.containsKey(16))
+                best = Math.max(best, angleMatchScore(drawDir, vectorAngleDeg(lm.get(14), lm.get(16)), tolerance));
+            if (best > 0) return new double[]{best * 1.5, 1.5};
+        }
+        return new double[]{0, 0};
+    }
+
     /** Ángulo en grados del vector desde {@code from} hasta {@code to}. */
     private static double vectorAngleDeg(javafx.geometry.Point2D from, javafx.geometry.Point2D to) {
         return Math.toDegrees(Math.atan2(to.getY() - from.getY(), to.getX() - from.getX()));
     }
 
-    /** Comprueba si las manos están levantadas por encima de la cabeza. */
+    /**
+     * Compara la altura de cada mano respecto al cuerpo — puntuación continua y bilateral.
+     *
+     * <p>Para cada mano (izquierda y derecha por separado) calcula la altura normalizada
+     * relativa al rango vertical cabeza–cadera. El score es continuo: una mano a la
+     * misma altura relativa que en la foto puntúa 1.0; un desvío del 50 % del rango
+     * corporal puntúa 0.0. Esto distingue con precisión: manos sobre la cabeza,
+     * a la altura de los hombros, a la cadera o por debajo.</p>
+     *
+     * <p>Soporta joints bilaterales ({@code LEFT_HAND} / {@code RIGHT_HAND}) y el
+     * centroide combinado ({@code HANDS}) como fallback.</p>
+     */
     private static double[] scoreHandsRaised(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
             java.util.Map<Integer, javafx.geometry.Point2D> lm) {
-        if (!joints.containsKey(AnatomyPart.HEAD) || !joints.containsKey(AnatomyPart.HANDS)) return new double[]{0, 0};
+        if (!joints.containsKey(AnatomyPart.HEAD)) return new double[]{0, 0};
         if (!lm.containsKey(15) && !lm.containsKey(16)) return new double[]{0, 0};
-        boolean drawHandsUp = joints.get(AnatomyPart.HANDS).getY() < joints.get(AnatomyPart.HEAD).getY();
-        double headY = lm.containsKey(0) ? lm.get(0).getY() : 0.2;
-        boolean imgHandsUp = (lm.containsKey(15) && lm.get(15).getY() < headY)
-                          || (lm.containsKey(16) && lm.get(16).getY() < headY);
-        return new double[]{drawHandsUp == imgHandsUp ? 2.0 : 0.0, 2.0};
+
+        // ── Referencias verticales del dibujo ─────────────────────────────
+        double drawTopY = joints.get(AnatomyPart.HEAD).getY();
+        double drawBotY = getDrawHipCenterY(joints, drawTopY + 0.5);
+        double bodyRangeDraw = Math.max(Math.abs(drawBotY - drawTopY), 0.05);
+
+        // ── Referencias verticales de la imagen ───────────────────────────
+        double imgTopY  = lm.containsKey(0) ? lm.get(0).getY() : 0.1;
+        double imgBotY  = getImageHipCenterY(lm, imgTopY + 0.5);
+        double bodyRangeImg = Math.max(Math.abs(imgBotY - imgTopY), 0.05);
+
+        double totalScore = 0;
+        int counted = 0;
+
+        // ── Mano izquierda: LEFT_HAND (o HANDS) vs LM15 ──────────────────
+        javafx.geometry.Point2D drawLH = joints.containsKey(AnatomyPart.LEFT_HAND)
+                ? joints.get(AnatomyPart.LEFT_HAND) : joints.get(AnatomyPart.HANDS);
+        if (drawLH != null && lm.containsKey(15)) {
+            double drawNorm = (drawLH.getY() - drawTopY) / bodyRangeDraw;
+            double imgNorm  = (lm.get(15).getY() - imgTopY) / bodyRangeImg;
+            totalScore += Math.max(0.0, 1.0 - (Math.abs(drawNorm - imgNorm) / 0.5));
+            counted++;
+        }
+        // ── Mano derecha: RIGHT_HAND (o HANDS) vs LM16 ───────────────────
+        javafx.geometry.Point2D drawRH = joints.containsKey(AnatomyPart.RIGHT_HAND)
+                ? joints.get(AnatomyPart.RIGHT_HAND) : joints.get(AnatomyPart.HANDS);
+        if (drawRH != null && lm.containsKey(16)) {
+            double drawNorm = (drawRH.getY() - drawTopY) / bodyRangeDraw;
+            double imgNorm  = (lm.get(16).getY() - imgTopY) / bodyRangeImg;
+            totalScore += Math.max(0.0, 1.0 - (Math.abs(drawNorm - imgNorm) / 0.5));
+            counted++;
+        }
+
+        if (counted == 0) return new double[]{0, 0};
+        return new double[]{(totalScore / counted) * 2.0, 2.0};
     }
 
-    /** Ángulo de la pierna: dirección cadera→rodilla por lado. Bilateral cuando disponible. */
+    /**
+     * Ángulo de la pierna: dirección cadera→rodilla por lado.
+     *
+     * <p><b>Modo óptimo (con HIP joints)</b>: usa el joint de cadera exacto
+     * ({@code LEFT_HIP}) como origen y el centroide de pantorrilla ({@code LEFT_CALF})
+     * como destino. Compara cadera→punto-medio-tibia en dibujo e imagen.</p>
+     *
+     * <p><b>Modo bilateral sin caderas</b>: usa el centroide del muslo como proxy.</p>
+     *
+     * <p><b>Fallback</b>: ángulo de rodilla clásico con joints combinados.</p>
+     */
     private static double[] scoreLegAngle(
             java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
             java.util.Map<Integer, javafx.geometry.Point2D> lm) {
@@ -725,7 +1060,24 @@ public class MediaPipeService {
         double totalScore = 0;
         int counted = 0;
 
-        // ── Bilateral: dirección vectorial cadera→rodilla ─────────────────────
+        // ── Modo óptimo: LEFT_HIP → LEFT_CALF vs LM23 → LM25 ────────────────
+        if (joints.containsKey(AnatomyPart.LEFT_HIP) && joints.containsKey(AnatomyPart.LEFT_CALF)
+                && lm.containsKey(23) && lm.containsKey(25)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_HIP), joints.get(AnatomyPart.LEFT_CALF));
+            double imgDir  = vectorAngleDeg(lm.get(23), lm.get(25));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_HIP) && joints.containsKey(AnatomyPart.RIGHT_CALF)
+                && lm.containsKey(24) && lm.containsKey(26)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_HIP), joints.get(AnatomyPart.RIGHT_CALF));
+            double imgDir  = vectorAngleDeg(lm.get(24), lm.get(26));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 1.5, 1.5};
+
+        // ── Bilateral sin caderas: centroide muslo → centroide pantorrilla ────
         if (joints.containsKey(AnatomyPart.LEFT_THIGH) && joints.containsKey(AnatomyPart.LEFT_CALF)
                 && lm.containsKey(23) && lm.containsKey(25)) {
             double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_THIGH), joints.get(AnatomyPart.LEFT_CALF));
@@ -740,9 +1092,7 @@ public class MediaPipeService {
             totalScore += angleMatchScore(drawDir, imgDir, tolerance);
             counted++;
         }
-        if (counted > 0) {
-            return new double[]{(totalScore / counted) * 1.5, 1.5};
-        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 1.5, 1.5};
 
         // ── Fallback: joints combinados ───────────────────────────────────────
         if (!joints.containsKey(AnatomyPart.THIGHS)
@@ -758,6 +1108,125 @@ public class MediaPipeService {
             best = Math.max(best, angleMatchScore(drawAngle,
                     PoseData.calculateAngle(lm.get(24), lm.get(26), lm.get(28)), tolerance));
         return best > 0 ? new double[]{best * 1.5, 1.5} : new double[]{0, 0};
+    }
+
+    /**
+     * Compara la dirección de la pantorrilla (rodilla→tobillo) en el dibujo con la foto.
+     *
+     * <p><b>Modo óptimo (bilateral)</b>: usa el centroide de la pantorrilla dibujada
+     * ({@code LEFT_CALF}) como origen y el tobillo ({@code LEFT_FOOT}) como destino,
+     * comparando con LM25→LM27 en la imagen. Distingue piernas extendidas de dobladas.</p>
+     *
+     * <p><b>Fallback combinado</b>: usa {@code CALVES→FEET} si no hay bilaterales.</p>
+     */
+    private static double[] scoreCalfAngle(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        double tolerance = PoseToleranceConfig.legAngleTolerance();
+        double totalScore = 0;
+        int counted = 0;
+
+        // ── Bilateral: LEFT_CALF → LEFT_FOOT vs LM25 → LM27 ─────────────────
+        if (joints.containsKey(AnatomyPart.LEFT_CALF) && joints.containsKey(AnatomyPart.LEFT_FOOT)
+                && lm.containsKey(25) && lm.containsKey(27)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.LEFT_CALF), joints.get(AnatomyPart.LEFT_FOOT));
+            double imgDir  = vectorAngleDeg(lm.get(25), lm.get(27));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (joints.containsKey(AnatomyPart.RIGHT_CALF) && joints.containsKey(AnatomyPart.RIGHT_FOOT)
+                && lm.containsKey(26) && lm.containsKey(28)) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.RIGHT_CALF), joints.get(AnatomyPart.RIGHT_FOOT));
+            double imgDir  = vectorAngleDeg(lm.get(26), lm.get(28));
+            totalScore += angleMatchScore(drawDir, imgDir, tolerance);
+            counted++;
+        }
+        if (counted > 0) return new double[]{(totalScore / counted) * 1.0, 1.0};
+
+        // ── Fallback: combinado CALVES → FEET ────────────────────────────────
+        if (joints.containsKey(AnatomyPart.CALVES) && joints.containsKey(AnatomyPart.FEET)
+                && (lm.containsKey(25) || lm.containsKey(26))
+                && (lm.containsKey(27) || lm.containsKey(28))) {
+            double drawDir = vectorAngleDeg(joints.get(AnatomyPart.CALVES), joints.get(AnatomyPart.FEET));
+            double best = 0;
+            if (lm.containsKey(25) && lm.containsKey(27))
+                best = Math.max(best, angleMatchScore(drawDir, vectorAngleDeg(lm.get(25), lm.get(27)), tolerance));
+            if (lm.containsKey(26) && lm.containsKey(28))
+                best = Math.max(best, angleMatchScore(drawDir, vectorAngleDeg(lm.get(26), lm.get(28)), tolerance));
+            if (best > 0) return new double[]{best * 1.0, 1.0};
+        }
+        return new double[]{0, 0};
+    }
+
+    /**
+     * Compara el ancho de postura (separación de pies normalizada por el ancho de caderas).
+     *
+     * <p>Distingue posturas cerradas (pies juntos) de posturas abiertas en A (pies separados).
+     * La separación se normaliza por el ancho de caderas para ser invariante a la escala.</p>
+     */
+    private static double[] scoreStanceWidth(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints,
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        // Necesita ambos pies en el dibujo y en la imagen
+        if (!joints.containsKey(AnatomyPart.LEFT_FOOT) || !joints.containsKey(AnatomyPart.RIGHT_FOOT))
+            return new double[]{0, 0};
+        if (!lm.containsKey(27) || !lm.containsKey(28)) return new double[]{0, 0};
+
+        double drawFootSpread = Math.abs(
+                joints.get(AnatomyPart.LEFT_FOOT).getX() - joints.get(AnatomyPart.RIGHT_FOOT).getX());
+        double imgFootSpread = Math.abs(lm.get(27).getX() - lm.get(28).getX());
+
+        double drawRef = getDrawHipWidth(joints);
+        double imgRef  = getImageHipWidth(lm);
+
+        double drawRatio = drawFootSpread / Math.max(drawRef, 0.05);
+        double imgRatio  = imgFootSpread  / Math.max(imgRef,  0.05);
+
+        // Tolerancia: ±1.5 anchos de cadera
+        double sim = Math.max(0.0, 1.0 - (Math.abs(drawRatio - imgRatio) / 1.5));
+        return new double[]{sim * 1.0, 1.0};
+    }
+
+    // ── Helpers de referencia corporal ────────────────────────────────────────
+
+    /** Ancho de caderas en el dibujo (fallback: hombros × 0.8, luego valor por defecto). */
+    private static double getDrawHipWidth(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints) {
+        if (joints.containsKey(AnatomyPart.LEFT_HIP) && joints.containsKey(AnatomyPart.RIGHT_HIP))
+            return Math.abs(joints.get(AnatomyPart.LEFT_HIP).getX() - joints.get(AnatomyPart.RIGHT_HIP).getX());
+        if (joints.containsKey(AnatomyPart.LEFT_SHOULDER) && joints.containsKey(AnatomyPart.RIGHT_SHOULDER))
+            return Math.abs(joints.get(AnatomyPart.LEFT_SHOULDER).getX() - joints.get(AnatomyPart.RIGHT_SHOULDER).getX()) * 0.8;
+        return 0.15;
+    }
+
+    /** Ancho de caderas en la imagen MediaPipe (fallback: hombros × 0.8). */
+    private static double getImageHipWidth(
+            java.util.Map<Integer, javafx.geometry.Point2D> lm) {
+        if (lm.containsKey(23) && lm.containsKey(24))
+            return Math.abs(lm.get(23).getX() - lm.get(24).getX());
+        if (lm.containsKey(11) && lm.containsKey(12))
+            return Math.abs(lm.get(11).getX() - lm.get(12).getX()) * 0.8;
+        return 0.15;
+    }
+
+    /** Y del centro de caderas en el dibujo (para normalización vertical de manos). */
+    private static double getDrawHipCenterY(
+            java.util.Map<AnatomyPart, javafx.geometry.Point2D> joints, double defaultVal) {
+        if (joints.containsKey(AnatomyPart.LEFT_HIP) && joints.containsKey(AnatomyPart.RIGHT_HIP))
+            return (joints.get(AnatomyPart.LEFT_HIP).getY() + joints.get(AnatomyPart.RIGHT_HIP).getY()) / 2.0;
+        if (joints.containsKey(AnatomyPart.HIPS))  return joints.get(AnatomyPart.HIPS).getY();
+        if (joints.containsKey(AnatomyPart.TORSO)) return joints.get(AnatomyPart.TORSO).getY();
+        return defaultVal;
+    }
+
+    /** Y del centro de caderas en la imagen MediaPipe. */
+    private static double getImageHipCenterY(
+            java.util.Map<Integer, javafx.geometry.Point2D> lm, double defaultVal) {
+        if (lm.containsKey(23) && lm.containsKey(24))
+            return (lm.get(23).getY() + lm.get(24).getY()) / 2.0;
+        if (lm.containsKey(23)) return lm.get(23).getY();
+        if (lm.containsKey(24)) return lm.get(24).getY();
+        return defaultVal;
     }
 
     /** Normaliza la diferencia de ángulo (0-360) a un score [0,1] según tolerancia. */
