@@ -15,10 +15,13 @@
         <padding><Insets top="60" bottom="60" left="40" right="40"/></padding>
 
         <!-- Logo / Marca -->
-        <VBox alignment="CENTER" spacing="8">
-            <Label text="◆" style="-fx-text-fill: #845460; -fx-font-size: 52px;
-                         -fx-effect: dropshadow(gaussian,rgba(132,84,96,0.7),18,0,0,0);"/>
-            <Label text="Referencias" style="-fx-text-fill: #EAD3CB; -fx-font-size: 26px;
+        <VBox alignment="CENTER" spacing="10">
+            <ImageView fitWidth="160" fitHeight="130" preserveRatio="true" smooth="true">
+                <image>
+                    <Image url="@sticksy_logo.png"/>
+                </image>
+            </ImageView>
+            <Label text="Sticksy" style="-fx-text-fill: #FFFFFF; -fx-font-size: 28px;
                          -fx-font-weight: bold; -fx-letter-spacing: 2;"/>
             <Label text="Buscador de Poses por Color" style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"/>
         </VBox>

@@ -91,7 +91,15 @@ public class BuscaReferenciasApp extends Application {
             logger.error("[STARTUP] Error configurando controller", e);
         }
 
-        stage.setTitle("Buscador de Referencias por Colores");
+        stage.setTitle("Sticksy");
+
+        // Icono de ventana / barra de tareas
+        try {
+            var iconUrl = BuscaReferenciasApp.class.getResource("sticksy_logo.png");
+            if (iconUrl != null) {
+                stage.getIcons().add(new javafx.scene.image.Image(iconUrl.toString()));
+            }
+        } catch (Exception ignored) {}
         stage.setScene(scene);
         stage.setMinWidth(360);
         stage.setMinHeight(500);
