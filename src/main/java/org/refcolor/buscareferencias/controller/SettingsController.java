@@ -196,6 +196,9 @@ public class SettingsController {
 
         // También forzar colores en los labels de toggle para que el estado visual sea coherente
         updateThemeToggle(dark);
+
+        // Notificar a otros componentes (DrawingController, etc.) que el tema cambió
+        org.refcolor.buscareferencias.settings.ThemeManager.notifyListeners();
     }
 
     private void applyI18n() {

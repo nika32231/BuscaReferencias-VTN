@@ -529,6 +529,35 @@ public class DatabaseManager {
     public record DrawingRecord(int id, String titulo, String snapshotPath,
                                 String fechaCreacion, int numBusquedas) {}
 
+    /** Elimina un dibujo y sus búsquedas asociadas del historial. */
+    public static void deleteDrawing(int idDibujo) {
+        String sqlBusq = "DELETE FROM Busquedas WHERE id_dibujo = ?";
+        String sqlDib  = "DELETE FROM Dibujos  WHERE id_dibujo = ?";
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false);
+            try (PreparedStatement ps1 = conn.prepareStatement(sqlBusq);
+                 PreparedStatement ps2 = conn.prepareStatement(sqlDib)) {
+                ps1.setInt(1, idDibujo); ps1.executeUpdate();
+                ps2.setInt(1, idDibujo); ps2.executeUpdate();
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+        } catch (SQLException e) { logger.warn("[DB] deleteDrawing({}): {}", idDibujo, e.getMessage()); }
+    }
+
+    /** Actualiza el título de un dibujo en el historial. */
+    public static void renameDrawing(int idDibujo, String newTitle) {
+        if (newTitle == null || newTitle.isBlank()) return;
+        String sql = "UPDATE Dibujos SET titulo = ? WHERE id_dibujo = ?";
+        try (Connection conn = getConnection(); PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, newTitle.trim());
+            ps.setInt(2, idDibujo);
+            ps.executeUpdate();
+        } catch (SQLException e) { logger.warn("[DB] renameDrawing({}): {}", idDibujo, e.getMessage()); }
+    }
+
     // ── Helpers de migración ──────────────────────────────────────────────────
 
     private static Set<String> getColumns(Connection conn, String tableName) throws SQLException {

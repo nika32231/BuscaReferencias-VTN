@@ -2,11 +2,19 @@ package org.refcolor.buscareferencias.controller;
 
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.layout.FlowPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 import org.refcolor.buscareferencias.BuscaReferenciasApp;
@@ -18,6 +26,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Controlador del historial de dibujos.
@@ -88,27 +97,28 @@ public class HistoryController {
     }
 
     private VBox buildCard(DatabaseManager.DrawingRecord rec) {
-        VBox card = new VBox(8);
+        boolean en = I18n.isEnglish();
+
+        VBox card = new VBox(6);
         card.setStyle(
             "-fx-background-color: #12263A;" +
             "-fx-background-radius: 10;" +
             "-fx-border-color: rgba(100,150,200,0.2);" +
             "-fx-border-radius: 10;" +
-            "-fx-padding: 10;" +
-            "-fx-cursor: hand;");
+            "-fx-padding: 10;");
         card.setPrefWidth(160);
 
         // Snapshot o placeholder
         ImageView iv = new ImageView();
         iv.setFitWidth(140);
-        iv.setFitHeight(120);
+        iv.setFitHeight(110);
         iv.setPreserveRatio(true);
 
         if (rec.snapshotPath() != null) {
             File f = new File(rec.snapshotPath());
             if (f.exists()) {
                 try {
-                    iv.setImage(new Image(f.toURI().toString(), 140, 120, true, true, true));
+                    iv.setImage(new Image(f.toURI().toString(), 140, 110, true, true, true));
                 } catch (Exception e) {
                     setPlaceholder(iv);
                 }
@@ -134,13 +144,58 @@ public class HistoryController {
         lblFecha.setStyle("-fx-text-fill: #6B8FA3; -fx-font-size: 11px;");
 
         // Búsquedas
-        String searchesText = I18n.isEnglish()
+        String searchesText = en
             ? "🔍 " + rec.numBusquedas() + " search(es)"
             : "🔍 " + rec.numBusquedas() + " búsqueda(s)";
         Label lblBusq = new Label(searchesText);
         lblBusq.setStyle("-fx-text-fill: #5A8A7C; -fx-font-size: 11px;");
 
-        card.getChildren().addAll(iv, lblTitulo, lblFecha, lblBusq);
+        // ── Botones de acción ─────────────────────────────────────────────────
+        Button btnRename = new Button(en ? "✏ Rename" : "✏ Renombrar");
+        btnRename.setStyle(
+            "-fx-background-color: #1C3A50; -fx-text-fill: #64B5F6;" +
+            "-fx-font-size: 10px; -fx-padding: 3 6; -fx-background-radius: 6; -fx-cursor: hand;");
+        btnRename.setOnAction(e -> {
+            TextInputDialog dlg = new TextInputDialog(titulo);
+            dlg.setTitle(en ? "Rename drawing" : "Renombrar dibujo");
+            dlg.setHeaderText(null);
+            dlg.setContentText(en ? "New name:" : "Nuevo nombre:");
+            if (stage != null) dlg.initOwner(stage);
+            Optional<String> result = dlg.showAndWait();
+            result.ifPresent(newName -> {
+                if (!newName.isBlank()) {
+                    DatabaseManager.renameDrawing(rec.id(), newName.trim());
+                    loadHistory();
+                }
+            });
+        });
+
+        Button btnDelete = new Button(en ? "🗑 Delete" : "🗑 Eliminar");
+        btnDelete.setStyle(
+            "-fx-background-color: #1C3A50; -fx-text-fill: #F44336;" +
+            "-fx-font-size: 10px; -fx-padding: 3 6; -fx-background-radius: 6; -fx-cursor: hand;");
+        btnDelete.setOnAction(e -> {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+            confirm.setTitle(en ? "Delete drawing" : "Eliminar dibujo");
+            confirm.setHeaderText(null);
+            confirm.setContentText(en
+                ? "Delete \"" + titulo + "\"? This cannot be undone."
+                : "¿Eliminar \"" + titulo + "\"? Esta acción no se puede deshacer.");
+            if (stage != null) confirm.initOwner(stage);
+            confirm.showAndWait().ifPresent(type -> {
+                if (type == ButtonType.OK) {
+                    DatabaseManager.deleteDrawing(rec.id());
+                    loadHistory();
+                }
+            });
+        });
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox btnRow = new HBox(4, btnRename, spacer, btnDelete);
+        btnRow.setAlignment(Pos.CENTER_LEFT);
+
+        card.getChildren().addAll(iv, lblTitulo, lblFecha, lblBusq, btnRow);
         return card;
     }
 

@@ -61,8 +61,20 @@
     -fx-border-color: rgba(0,0,0,0.1);
 }
 
+.palette-pill-button:hover {
+    -fx-background-color: #DDE5F0;
+}
+
 .palette-pill-button:selected {
     -fx-background-color: #845460;
+    -fx-text-fill: white;
+}
+
+.palette-pill-button .label {
+    -fx-text-fill: #2D3748;
+}
+
+.palette-pill-button:selected .label {
     -fx-text-fill: white;
 }
 

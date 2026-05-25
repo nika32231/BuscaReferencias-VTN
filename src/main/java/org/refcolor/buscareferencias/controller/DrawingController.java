@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javafx.animation.FadeTransition;
@@ -194,6 +195,12 @@ public class DrawingController {
     /** true una vez que el usuario ha trazado algún trazo (no borrador). */
     private boolean canvasHasContent = false;
 
+    // ── Control de versión del canvas (para detección de cambio entre búsquedas) ─
+    /** Incrementa con cada trazo, undo, redo o clear. */
+    private long canvasVersion       = 0L;
+    /** Versión del canvas en el momento de la última búsqueda lanzada. */
+    private long canvasVersionAtSearch = -1L;
+
     public void setHostServices(HostServices hostServices) {
         this.hostServices = hostServices;
     }
@@ -232,6 +239,10 @@ public class DrawingController {
         // i18n: apply initial locale texts and register listener for language changes
         I18n.addChangeListener(() -> Platform.runLater(this::applyI18n));
         applyI18n();
+
+        // Tema: reconstruir paleta cuando el usuario cambie el tema desde Ajustes
+        org.refcolor.buscareferencias.settings.ThemeManager.addChangeListener(
+            () -> Platform.runLater(this::applyThemeChange));
 
         // Añadir botones de usuario/historial/ajustes al toolbar (dinámicamente)
         addUserToolbarButtons();
@@ -587,12 +598,16 @@ public class DrawingController {
      * Así el usuario siempre ve con qué color va a dibujar.
      */
     private static HBox buildPaletteGraphic(AnatomyPart part, String label, boolean selected) {
+        boolean dark = org.refcolor.buscareferencias.settings.AppSettings.isDarkTheme();
         Color base = Color.web(part.getHexColor());
 
         // ── Círculo swatch ──────────────────────────────────────────────────────
         javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(selected ? 11.0 : 9.5);
         dot.setFill(base);
-        dot.setStroke(Color.web(selected ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)"));
+        // En tema claro el anillo del swatch es oscuro para que contraste con el fondo blanco
+        dot.setStroke(Color.web(selected
+            ? (dark ? "rgba(255,255,255,0.95)" : "rgba(0,0,0,0.70)")
+            : (dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.35)")));
         dot.setStrokeWidth(selected ? 2.0 : 1.0);
         if (selected) {
             javafx.scene.effect.DropShadow glow = new javafx.scene.effect.DropShadow(
@@ -601,10 +616,16 @@ public class DrawingController {
         }
 
         // ── Etiqueta de texto ───────────────────────────────────────────────────
+        // En tema oscuro: blanco/azul claro. En tema claro: dejamos que CSS lo controle.
         Label txt = new Label(label);
-        txt.setStyle("-fx-text-fill: " + (selected ? "#FFFFFF" : "rgba(198,220,242,0.92)") + ";"
-                   + " -fx-font-size: 14px;"
-                   + (selected ? " -fx-font-weight: bold;" : ""));
+        if (dark) {
+            txt.setStyle("-fx-text-fill: " + (selected ? "#FFFFFF" : "rgba(198,220,242,0.92)") + ";"
+                       + " -fx-font-size: 14px;"
+                       + (selected ? " -fx-font-weight: bold;" : ""));
+        } else {
+            // Tema claro: eliminar inline color y dejar que style-light.css lo defina
+            txt.setStyle("-fx-font-size: 14px;" + (selected ? " -fx-font-weight: bold;" : ""));
+        }
 
         HBox box = new HBox(10, dot, txt);
         box.setAlignment(Pos.CENTER_LEFT);
@@ -614,24 +635,51 @@ public class DrawingController {
     /**
      * Genera el inline style para un botón-pastilla de paleta.
      *
-     * Nuevo esquema visual (fondo oscuro + acento lateral de color):
+     * En tema OSCURO usa colores hardcoded (fondo oscuro + acento lateral de color):
      *   state 0 = normal   → fondo oscuro neutro + franja izquierda coloreada (3.5 px)
      *   state 1 = hover    → fondo ligeramente más claro + franja 4 px + glow suave
      *   state 2 = selected → fondo tintado con el color + borde blanco 2 px + glow fuerte
+     *
+     * En tema CLARO retorna un inline style mínimo (solo border-radius y el glow de color)
+     * para que style-light.css pueda controlar el fondo, texto y bordes.
      *
      * El círculo swatch del gráfico ({@link #buildPaletteGraphic}) siempre muestra
      * el color exacto, por lo que el fondo del botón no necesita serlo.
      */
     private static String buildPillStyle(AnatomyPart part, int state) {
+        boolean dark = org.refcolor.buscareferencias.settings.AppSettings.isDarkTheme();
         Color base = Color.web(part.getHexColor());
         int r = (int)(base.getRed()   * 255);
         int g = (int)(base.getGreen() * 255);
         int b = (int)(base.getBlue()  * 255);
-
-        // Fondo tintado muy oscuro para el estado seleccionado
-        Color selectedBg = base.interpolate(Color.web("#0D1B26"), 0.78);
         String glow = "dropshadow(gaussian, rgba(" + r + "," + g + "," + b + ",0.85), 18, 0.22, 0, 0)";
 
+        if (!dark) {
+            // Tema claro: inline style mínimo — solo efecto de glow y borde coloreado;
+            // el CSS de style-light.css gestiona el fondo y el color de texto.
+            return switch (state) {
+                case 1 -> // hover
+                    "-fx-background-radius: 8;" +
+                    "-fx-border-color: transparent transparent transparent rgba(" + r + "," + g + "," + b + ",0.90);" +
+                    "-fx-border-width: 0 0 0 4;" +
+                    "-fx-border-radius: 8;" +
+                    "-fx-effect: " + glow + ";";
+                case 2 -> // selected
+                    "-fx-background-radius: 8;" +
+                    "-fx-border-color: rgba(" + r + "," + g + "," + b + ",1.0);" +
+                    "-fx-border-width: 2;" +
+                    "-fx-border-radius: 8;" +
+                    "-fx-effect: " + glow + ";";
+                default -> // normal
+                    "-fx-background-radius: 8;" +
+                    "-fx-border-color: transparent transparent transparent rgba(" + r + "," + g + "," + b + ",0.70);" +
+                    "-fx-border-width: 0 0 0 3.5;" +
+                    "-fx-border-radius: 8;";
+            };
+        }
+
+        // Tema oscuro: colores hardcoded (comportamiento original)
+        Color selectedBg = base.interpolate(Color.web("#0D1B26"), 0.78);
         return switch (state) {
             case 1 -> // hover: fondo algo más claro + franja izquierda 4 px + glow suave
                 "-fx-background-color: rgba(28,54,82,0.96);" +
@@ -745,6 +793,7 @@ public class DrawingController {
         if (!btnErase.isSelected()) { gc.stroke(); gc.closePath(); }
         clearCursorOverlay();
         saveCurrentState();
+        canvasVersion++;
     }
 
     @FXML
@@ -760,6 +809,7 @@ public class DrawingController {
             clearToWhite();
             updateCanvasHint();
             saveCurrentState();
+            canvasVersion++;
             FadeTransition restore = new FadeTransition(Duration.millis(120), canvasContainer);
             restore.setFromValue(0.08);
             restore.setToValue(1.0);
@@ -776,6 +826,7 @@ public class DrawingController {
             gc.drawImage(undoStack.peek(), 0, 0);
             statusLabel.setText(I18n.t("status.undo"));
             updateUndoRedoButtons();
+            canvasVersion++;
         }
     }
 
@@ -788,6 +839,7 @@ public class DrawingController {
             gc.drawImage(next, 0, 0);
             statusLabel.setText(I18n.t("status.redo"));
             updateUndoRedoButtons();
+            canvasVersion++;
         }
     }
 
@@ -1004,6 +1056,18 @@ public class DrawingController {
         }
     }
 
+    /**
+     * Reconstruye la paleta cuando el usuario cambia el tema (claro ↔ oscuro).
+     * Se invoca desde ThemeManager — siempre en el hilo de JavaFX.
+     */
+    private void applyThemeChange() {
+        if (paletteContainer != null) {
+            paletteContainer.getChildren().clear();
+            setupPalette();
+        }
+    }
+
+
     /** True si el statusLabel aún muestra el mensaje inicial (vacío o "ready"). */
     private static boolean shouldResetStatusToReady(String currentText) {
         return currentText == null
@@ -1068,31 +1132,49 @@ public class DrawingController {
 
     @FXML
     private void handleLocalPhotoSearch() {
-        statusLabel.setText(I18n.t("status.analyzing"));
+        // Determinar si el lienzo ha cambiado desde la última búsqueda
+        boolean isFreshSearch = (canvasVersion != canvasVersionAtSearch);
+        canvasVersionAtSearch = canvasVersion;  // registrar para la próxima vez
+
+        if (isFreshSearch) {
+            statusLabel.setText(I18n.t("status.analyzing"));
+            galleryPane.getChildren().clear();
+            updateGalleryEmptyState(false);
+        } else {
+            // Mismo dibujo → continuar con el siguiente lote no analizado aún
+            statusLabel.setText(I18n.isEnglish() ? "⏩ Continuing search..." : "⏩ Continuando búsqueda...");
+        }
         setSearchProgress(true, 0.0, 0.0, 0, 1);
-        galleryPane.getChildren().clear();
-        updateGalleryEmptyState(false);
 
         javafx.scene.SnapshotParameters params = new javafx.scene.SnapshotParameters();
         params.setFill(Color.TRANSPARENT);
         final WritableImage snapshot = canvas.snapshot(params, null);
+
+        // Si es continuación y tenemos pose guardada, reutilizarla para evitar
+        // re-procesar el canvas (el pose del stickman no ha cambiado).
+        final PoseData reuseablePose = (!isFreshSearch && lastAnalyzedPose != null)
+            ? lastAnalyzedPose : null;
 
         AtomicReference<PoseData> computedPoseRef = new AtomicReference<>();
 
         Task<List<ImageResult>> searchTask = new Task<>() {
             @Override
             protected List<ImageResult> call() {
-                // Siempre re-analizar el lienzo actual para que cada búsqueda
-                // refleje el stickman que el usuario acaba de dibujar.
-                PoseData pose = DrawingProcessor.processImage(snapshot);
+                PoseData pose;
+                if (reuseablePose != null) {
+                    // Reutilizar pose: no hace falta volver a analizar el canvas
+                    pose = reuseablePose;
+                } else {
+                    pose = DrawingProcessor.processImage(snapshot);
+                }
                 computedPoseRef.set(pose);
 
                 if (pose != null && !pose.getAllJoints().isEmpty()) {
                     List<String> terms = SearchTermGenerator.generateTerms(pose);
-                    // Cuenta semántica: cada lado bilateral (L/R) suma 1;
-                    // el centroide combinado no cuenta si ya hay splits detectados.
                     final int partCount = countMeaningfulJoints(pose);
-                    currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
+                    if (isFreshSearch) {
+                        currentSearchId = DatabaseManager.saveDrawing(pose, terms, null);
+                    }
                     Platform.runLater(() ->
                             statusLabel.setText(I18n.fmt("status.poseDetected", partCount))
                     );
@@ -1114,16 +1196,40 @@ public class DrawingController {
             }
 
             List<ImageResult> results = searchTask.getValue();
-            galleryPane.getChildren().clear();
-            displayResults(results);
+
+            if (isFreshSearch) {
+                // Búsqueda nueva: reemplazar galería por completo
+                galleryPane.getChildren().clear();
+                displayResults(results);
+            } else {
+                // Continuación: agregar nuevos resultados a los existentes (sin duplicar)
+                Set<String> existingPaths = galleryPane.getChildren().stream()
+                    .map(n -> (String) n.getUserData())
+                    .filter(java.util.Objects::nonNull)
+                    .collect(java.util.stream.Collectors.toSet());
+                List<ImageResult> newResults = results.stream()
+                    .filter(r -> !existingPaths.contains(r.getThumbnailUrl()))
+                    .collect(java.util.stream.Collectors.toList());
+                displayResults(newResults);
+            }
+
             setSearchProgress(false, -1);
 
-            if (results.isEmpty()) {
+            if (galleryPane.getChildren().isEmpty()) {
                 updateGalleryEmptyState(true);
                 statusLabel.setText(buildEmptySearchMessage());
             } else {
+                // Calcular el mejor score de TODOS los resultados visibles en galería
+                long total = galleryPane.getChildren().size();
+                int newCount = results.size();
                 double best = results.stream().mapToDouble(ImageResult::getScore).filter(s -> s >= 0).max().orElse(0);
-                statusLabel.setText(I18n.fmt("status.searchDone", results.size(), Math.round(best * 100)));
+                if (isFreshSearch) {
+                    statusLabel.setText(I18n.fmt("status.searchDone", total, Math.round(best * 100)));
+                } else {
+                    statusLabel.setText(I18n.isEnglish()
+                        ? "✓ +" + newCount + " more results · " + total + " total"
+                        : "✓ +" + newCount + " resultados más · " + total + " en total");
+                }
                 if (currentSearchId != -1) {
                     DatabaseManager.saveResults(currentSearchId, results);
                 }
@@ -1219,6 +1325,7 @@ public class DrawingController {
         int delayMs = 0;
         for (ImageResult result : results) {
             HBox card = buildGalleryCard(result, rank++);
+            card.setUserData(result.getThumbnailUrl());  // usado para deduplicación en continue-search
             card.setOpacity(0);
             card.setTranslateY(14);
             galleryPane.getChildren().add(card);
