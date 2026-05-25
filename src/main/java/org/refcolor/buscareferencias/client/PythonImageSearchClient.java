@@ -260,6 +260,94 @@ public final class PythonImageSearchClient {
 		}
 	}
 
+	/**
+	 * Ejecuta {@code pose_analyzer.exe} (bundle PyInstaller) con los args dados,
+	 * sin necesitar un intérprete Python. Para el modo single-image.
+	 */
+	public static CommandResult runExe(Path exePath, List<String> args, int timeoutSeconds) {
+		if (exePath == null) {
+			return new CommandResult(List.of(), false, -1, "", "", "exePath nulo");
+		}
+		List<String> command = new ArrayList<>();
+		command.add(exePath.toAbsolutePath().toString());
+		if (args != null) command.addAll(args);
+		return runCommand(command, exePath.getParent(), timeoutSeconds);
+	}
+
+	/**
+	 * Ejecuta {@code pose_analyzer.exe} (bundle PyInstaller) en modo {@code --batch}
+	 * sin necesitar un intérprete Python. El protocolo stdin/stdout es idéntico al de
+	 * {@link #runBatchScript}: rutas de imagen una por línea en stdin; un JSON por línea
+	 * en stdout.
+	 */
+	public static List<String> runExeBatch(Path exePath, List<String> imagePaths,
+	                                        int timeoutSeconds, Consumer<Integer> onImageDone) {
+		if (exePath == null || imagePaths == null || imagePaths.isEmpty()) {
+			return List.of();
+		}
+
+		List<String> command = List.of(exePath.toAbsolutePath().toString(), "--batch");
+		ProcessBuilder pb = new ProcessBuilder(command);
+		pb.directory(exePath.getParent().toFile());
+
+		try {
+			Process process = pb.start();
+			List<String> results = new ArrayList<>();
+
+			Thread stdinWriter = new Thread(() -> {
+				try (var writer = new java.io.OutputStreamWriter(
+						process.getOutputStream(), StandardCharsets.UTF_8)) {
+					for (String path : imagePaths) {
+						writer.write(path);
+						writer.write('\n');
+					}
+				} catch (IOException ignored) {}
+			}, "exe-batch-stdin-writer");
+
+			StringBuilder stderrBuf = new StringBuilder();
+			Thread stderrReader = readStreamAsync(process.getErrorStream(), stderrBuf);
+
+			stdinWriter.start();
+			stderrReader.start();
+
+			try (var reader = new java.io.BufferedReader(
+					new java.io.InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+				String line;
+				int doneCount = 0;
+				while ((line = reader.readLine()) != null) {
+					String trimmed = line.trim();
+					if (!trimmed.isEmpty()) {
+						results.add(trimmed);
+						doneCount++;
+						if (onImageDone != null) onImageDone.accept(doneCount);
+					}
+				}
+			}
+
+			joinQuietly(stdinWriter);
+			joinQuietly(stderrReader);
+			boolean finished = process.waitFor(Math.max(1, timeoutSeconds), TimeUnit.SECONDS);
+			if (!finished) {
+				process.destroyForcibly();
+				logger.warn("[EXE-BATCH] Timeout después de {} s analizando {} imágenes",
+						timeoutSeconds, imagePaths.size());
+			}
+			if (!stderrBuf.isEmpty()) {
+				logger.debug("[EXE-BATCH] stderr: {}", trim(stderrBuf.toString()));
+			}
+			logger.info("[EXE-BATCH] Completado: {} resultados de {} imágenes solicitadas",
+					results.size(), imagePaths.size());
+			return results;
+		} catch (IOException e) {
+			logger.error("[EXE-BATCH] Error de E/S: {}", e.toString());
+			return List.of();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			logger.error("[EXE-BATCH] Interrumpido: {}", e.toString());
+			return List.of();
+		}
+	}
+
 	public static CommandResult runPythonScript(Path scriptPath, List<String> args, Path workingDirectory, int timeoutSeconds) {
 		if (scriptPath == null) {
 			return new CommandResult(List.of(), false, -1, "", "", "El script de Python no fue encontrado");
@@ -321,6 +409,61 @@ public final class PythonImageSearchClient {
 		}
 		logger.warn("[PYTHON] No se encontro {} (buscado en Python/ y raiz del proyecto)", scriptName);
 		return null;
+	}
+
+	// ── EXE BUNDLE: pose_analyzer.exe generado por PyInstaller ──────────────
+	private static volatile Path bundledAnalyzerExe = null;
+	private static volatile boolean bundledExeChecked = false;
+
+	/**
+	 * Devuelve la ruta al {@code pose_analyzer.exe} embebido (bundle PyInstaller),
+	 * o {@code null} si no existe en el disco.
+	 * Busca en:
+	 *   1) Variable de entorno {@code BUNDLED_ANALYZER_EXE}
+	 *   2) {@code <CWD>/python-bundle/pose_analyzer.exe}
+	 *   3) Directorio del JAR en ejecución
+	 */
+	public static Path getBundledAnalyzerExe() {
+		if (bundledExeChecked) return bundledAnalyzerExe;
+		synchronized (PythonImageSearchClient.class) {
+			if (bundledExeChecked) return bundledAnalyzerExe;
+			bundledExeChecked = true;
+
+			String envPath = System.getenv("BUNDLED_ANALYZER_EXE");
+			if (envPath != null && !envPath.isBlank()) {
+				Path p = Paths.get(envPath);
+				if (Files.isExecutable(p)) { bundledAnalyzerExe = p; return p; }
+			}
+
+			List<Path> roots = new ArrayList<>();
+			roots.add(Paths.get("").toAbsolutePath());
+			roots.add(Paths.get(System.getProperty("user.dir", "")).toAbsolutePath());
+			try {
+				java.security.CodeSource cs = PythonImageSearchClient.class
+					.getProtectionDomain().getCodeSource();
+				if (cs != null) {
+					Path jarDir = Paths.get(cs.getLocation().toURI()).getParent();
+					if (jarDir != null) {
+						roots.add(jarDir);
+						// jpackage: el JAR vive en app/, la raíz de la app está en app/../
+						// → python-bundle/pose_analyzer.exe está en app/../python-bundle/
+						Path appRoot = jarDir.getParent();
+						if (appRoot != null) roots.add(appRoot);
+					}
+				}
+			} catch (Exception ignored) {}
+
+			for (Path root : roots) {
+				Path candidate = root.resolve("python-bundle").resolve("pose_analyzer.exe");
+				if (Files.isExecutable(candidate)) {
+					logger.info("[PYTHON-BUNDLE] pose_analyzer.exe embebido: {}", candidate);
+					bundledAnalyzerExe = candidate;
+					return candidate;
+				}
+			}
+			logger.debug("[PYTHON-BUNDLE] pose_analyzer.exe no encontrado; se usará Python del sistema");
+			return null;
+		}
 	}
 
 	private static List<Candidate> buildCandidates() {

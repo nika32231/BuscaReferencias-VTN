@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="org.refcolor.buscareferencias.controller.SettingsController"
+            stylesheets="@style.css">
+
+    <!-- Cabecera -->
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="12" styleClass="app-header">
+            <Button text="←" onAction="#handleBack"
+                    style="-fx-background-color: transparent; -fx-text-fill: #BDC7C9;
+                           -fx-font-size: 16px; -fx-cursor: hand; -fx-padding: 4 8;"/>
+            <Label fx:id="lblTitle" text="⚙ Ajustes" style="-fx-text-fill: #EAD3CB; -fx-font-size: 16px;
+                         -fx-font-weight: bold;"/>
+        </HBox>
+    </top>
+
+    <center>
+        <ScrollPane fitToWidth="true" style="-fx-background: transparent; -fx-background-color: transparent;">
+            <!-- Wrapper centrado para pantallas anchas de escritorio -->
+            <VBox alignment="TOP_CENTER" style="-fx-padding: 24; -fx-fill-width: true;">
+            <VBox spacing="20" maxWidth="640" style="-fx-pref-width: 640;">
+
+                <!-- Sección: Búsqueda -->
+                <VBox spacing="10" styleClass="app-section">
+                    <Label fx:id="lblSectionSearch" text="BÚSQUEDA"
+                           style="-fx-text-fill: #6B8FA3; -fx-font-size: 11px;
+                                  -fx-font-weight: bold; -fx-letter-spacing: 1;"/>
+                    <Separator style="-fx-background-color: rgba(100,150,200,0.15);"/>
+
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label fx:id="lblPhotosPerRound" text="Fotos analizadas por ronda"
+                               style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Spinner fx:id="spnPhotosPerRound" min="10" max="500" initialValue="100"
+                                 prefWidth="90" editable="true"
+                                 style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;"/>
+                    </HBox>
+
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label fx:id="lblMinScore" text="Score mínimo de similitud (%)"
+                               style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <Spinner fx:id="spnMinScore" min="0" max="90" initialValue="40"
+                                 prefWidth="90" editable="true"
+                                 style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;"/>
+                    </HBox>
+                </VBox>
+
+                <!-- Sección: Biblioteca de fotos -->
+                <VBox spacing="10" styleClass="app-section">
+                    <Label fx:id="lblSectionLibrary" text="BIBLIOTECA DE FOTOS"
+                           style="-fx-text-fill: #6B8FA3; -fx-font-size: 11px;
+                                  -fx-font-weight: bold; -fx-letter-spacing: 1;"/>
+                    <Separator style="-fx-background-color: rgba(100,150,200,0.15);"/>
+                    <Label fx:id="lblPhotoCount" text="0 fotos en la biblioteca"
+                           style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"/>
+                    <Button fx:id="btnAddPhotos" text="📂  Añadir fotos a la biblioteca"
+                            onAction="#handleAddPhotos" maxWidth="Infinity"
+                            style="-fx-background-color: #1A3245; -fx-text-fill: #7EC8E3;
+                                   -fx-font-size: 13px; -fx-padding: 10 16;
+                                   -fx-background-radius: 6; -fx-cursor: hand;
+                                   -fx-border-color: rgba(126,200,227,0.3); -fx-border-radius: 6;"/>
+                    <Label fx:id="lblLibraryPath" text=""
+                           style="-fx-text-fill: #445566; -fx-font-size: 11px;" wrapText="true"/>
+                </VBox>
+
+                <!-- Sección: Apariencia -->
+                <VBox spacing="10" styleClass="app-section">
+                    <Label fx:id="lblSectionAppearance" text="APARIENCIA"
+                           style="-fx-text-fill: #6B8FA3; -fx-font-size: 11px;
+                                  -fx-font-weight: bold; -fx-letter-spacing: 1;"/>
+                    <Separator style="-fx-background-color: rgba(100,150,200,0.15);"/>
+
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label fx:id="lblDarkTheme" text="Tema oscuro"
+                               style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <ToggleButton fx:id="tglDarkTheme" text="ON" onAction="#handleThemeToggle"
+                                      style="-fx-background-color: #845460; -fx-text-fill: white;
+                                             -fx-font-size: 12px; -fx-padding: 6 14;
+                                             -fx-background-radius: 20;"/>
+                    </HBox>
+                </VBox>
+
+                <!-- Sección: Notificaciones -->
+                <VBox spacing="10" styleClass="app-section">
+                    <Label fx:id="lblSectionNotif" text="NOTIFICACIONES"
+                           style="-fx-text-fill: #6B8FA3; -fx-font-size: 11px;
+                                  -fx-font-weight: bold; -fx-letter-spacing: 1;"/>
+                    <Separator style="-fx-background-color: rgba(100,150,200,0.15);"/>
+
+                    <HBox alignment="CENTER_LEFT" spacing="12">
+                        <Label fx:id="lblSound" text="Sonido al terminar análisis"
+                               style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"
+                               HBox.hgrow="ALWAYS" maxWidth="Infinity"/>
+                        <ToggleButton fx:id="tglSound" text="OFF" onAction="#handleSoundToggle"
+                                      style="-fx-background-color: #1C3A50; -fx-text-fill: #6B8FA3;
+                                             -fx-font-size: 12px; -fx-padding: 6 14;
+                                             -fx-background-radius: 20;"/>
+                    </HBox>
+                </VBox>
+
+                <!-- Botón Guardar -->
+                <Button fx:id="btnSave" text="✓  Guardar cambios" onAction="#handleSave"
+                        maxWidth="Infinity"
+                        style="-fx-background-color: #5A8A7C; -fx-text-fill: white;
+                               -fx-font-size: 14px; -fx-font-weight: bold;
+                               -fx-padding: 12 24; -fx-background-radius: 8; -fx-cursor: hand;"/>
+
+                <Label fx:id="lblSaved" text="" style="-fx-text-fill: #5A8A7C; -fx-font-size: 12px;"
+                       alignment="CENTER" maxWidth="Infinity"/>
+
+            </VBox>
+            </VBox>
+        </ScrollPane>
+    </center>
+</BorderPane>

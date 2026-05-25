@@ -12,6 +12,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javafx.animation.FadeTransition;
@@ -45,6 +46,8 @@ import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 import javafx.stage.FileChooser;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +74,40 @@ public class DrawingController {
     private static final double ERASER_RADIUS = 18.0;
     private static final Color CANVAS_FRAME_COLOR = Color.web("#BDC7C9");
     private static final int UNDO_STACK_LIMIT = 20;
+
+    /**
+     * Conexiones del esqueleto MediaPipe Pose (33 landmarks).
+     * Usadas para visualizar la pose detectada sobre la foto en el diálogo de detalle.
+     */
+    private static final int[][] SKELETON_CONNECTIONS = {
+        // Cara
+        {0,1},{1,2},{2,3},{3,7}, {0,4},{4,5},{5,6},{6,8}, {9,10},
+        // Torso superior
+        {11,12},
+        // Brazo izquierdo
+        {11,13},{13,15},
+        // Brazo derecho
+        {12,14},{14,16},
+        // Manos (dedos simplificados)
+        {15,17},{15,19},{15,21}, {16,18},{16,20},{16,22},
+        // Torso
+        {11,23},{12,24},{23,24},
+        // Pierna izquierda
+        {23,25},{25,27},{27,29},{29,31},{27,31},
+        // Pierna derecha
+        {24,26},{26,28},{28,30},{30,32},{28,32}
+    };
+
+    /** Landmarks del lado izquierdo de MediaPipe (verde en visualización auténtica). */
+    private static final java.util.Set<Integer> SKEL_LEFT_IDS = java.util.Set.of(
+            1, 2, 3, 7, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31);
+    /** Landmarks del lado derecho de MediaPipe (rojo en visualización auténtica). */
+    private static final java.util.Set<Integer> SKEL_RIGHT_IDS = java.util.Set.of(
+            4, 5, 6, 8, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32);
+    // Centro (0, 9, 10) → blanco
+    private static final Color SKEL_LEFT   = Color.web("#00CC88");  // verde
+    private static final Color SKEL_RIGHT  = Color.web("#FF5555");  // rojo
+    private static final Color SKEL_CENTER = Color.web("#FFFFFF");  // blanco
 
     @FXML private Canvas canvas;
     @FXML private BorderPane rootPane;
@@ -104,6 +141,15 @@ public class DrawingController {
     @FXML private FlowPane galleryPane;
     @FXML private VBox galleryEmptyState;
     @FXML private Label galleryEmptyLabel;
+
+    // ── Callback de logout (inyectado por SplashController) ──────────────────
+    private Runnable onLogout;
+
+    // Stage guardado para poder navegar de vuelta desde subscreens (canvas.getScene()
+    // devuelve null una vez que setRoot() sustituye el root con otra vista)
+    private javafx.stage.Stage savedStage;
+
+    public void setOnLogout(Runnable r) { this.onLogout = r; }
 
     private GraphicsContext gc;
     private AnatomyPart currentPart = AnatomyPart.HEAD;
@@ -186,6 +232,12 @@ public class DrawingController {
         // i18n: apply initial locale texts and register listener for language changes
         I18n.addChangeListener(() -> Platform.runLater(this::applyI18n));
         applyI18n();
+
+        // Añadir botones de usuario/historial/ajustes al toolbar (dinámicamente)
+        addUserToolbarButtons();
+
+        // Cargar ajustes (photo limit, sound, etc.)
+        org.refcolor.buscareferencias.settings.AppSettings.load();
 
         logger.info("[UI] DrawingController.initialize() end en {} ms", java.time.Duration.between(t0, Instant.now()).toMillis());
     }
@@ -1076,6 +1128,8 @@ public class DrawingController {
                     DatabaseManager.saveResults(currentSearchId, results);
                 }
             }
+            // Sonido de finalización
+            org.refcolor.buscareferencias.utils.SoundUtils.playSearchDing();
         });
 
         searchTask.setOnFailed(e -> {
@@ -1200,7 +1254,7 @@ public class DrawingController {
 
         imageCard.getChildren().addAll(imageStack, buildScoreLabel(result, rank));
         imageCard.setCursor(Cursor.HAND);
-        imageCard.setOnMouseClicked(e -> openResultSource(result));
+        imageCard.setOnMouseClicked(e -> showImageDetailDialog(result, rank));
 
         // ── Panel de análisis (lado derecho, oculto al inicio) ────────────────
         VBox infoPanel = buildPosePopup(result);
@@ -1397,6 +1451,344 @@ public class DrawingController {
         return (display == null || display.isBlank()) ? result.getThumbnailUrl() : display;
     }
 
+    /** Resuelve la URL de visualización de la imagen (preferencia: displayThumbnailUrl). */
+    private static String resolveDisplayUrl(ImageResult result) {
+        String url = result.getDisplayThumbnailUrl();
+        if (url == null || url.isBlank()) url = result.getThumbnailUrl();
+        if (url == null || url.isBlank()) url = result.getOriginalUrl();
+        return url;
+    }
+
+    // ── Diálogo de detalle de imagen ──────────────────────────────────────────
+
+    private void showImageDetailDialog(ImageResult result, int rank) {
+        Stage dialog = new Stage();
+        dialog.initModality(Modality.APPLICATION_MODAL);
+        dialog.initOwner(canvas.getScene().getWindow());
+        dialog.setTitle(I18n.fmt("detail.title", rank));
+        dialog.setMinWidth(700);
+        dialog.setMinHeight(540);
+
+        VBox root = new VBox(14);
+        root.setPadding(new javafx.geometry.Insets(18));
+        root.setStyle("-fx-background-color: #0A1626;");
+
+        // ── Título con rango y score ───────────────────────────────────────────
+        String scoreText = result.getScore() > 0
+                ? String.format("  ·  %.0f%%", result.getScore() * 100) : "";
+        Label titleLabel = new Label(I18n.fmt("detail.title", rank) + scoreText);
+        titleLabel.setStyle("-fx-text-fill: #B8D4EC; -fx-font-size: 15px; -fx-font-weight: bold;");
+
+        // ── Área de imagen (con toggle foto/esqueleto) ────────────────────────
+        double dispW = 480, dispH = 540;
+        PoseData poseData = result.getPoseData();
+        String imageUrl = resolveDisplayUrl(result);
+        // Para el fondo del esqueleto se prefiere la imagen original (mayor resolución)
+        String skeletonUrl = result.getOriginalUrl() != null && !result.getOriginalUrl().isBlank()
+                ? result.getOriginalUrl() : imageUrl;
+
+        ToggleButton btnPhoto    = new ToggleButton(I18n.t("detail.photo"));
+        ToggleButton btnSkeleton = new ToggleButton(I18n.t("detail.skeleton"));
+        ToggleGroup viewGroup = new ToggleGroup();
+        btnPhoto.setToggleGroup(viewGroup);
+        btnSkeleton.setToggleGroup(viewGroup);
+        btnPhoto.setSelected(true);
+        boolean hasPose = poseData != null && !poseData.getAllLandmarks().isEmpty();
+        btnSkeleton.setDisable(!hasPose);
+
+        String toggleStyle = "-fx-font-size: 12px; -fx-padding: 5 12;";
+        btnPhoto.setStyle(toggleStyle);
+        btnSkeleton.setStyle(toggleStyle);
+
+        ImageView imageView = new ImageView();
+        imageView.setFitWidth(dispW);
+        imageView.setFitHeight(dispH);
+        imageView.setPreserveRatio(true);
+        if (imageUrl != null) {
+            Image img = new Image(imageUrl, dispW, dispH, true, true, true);
+            imageView.setImage(img);
+        }
+
+        Canvas skeletonCanvas = new Canvas(dispW, dispH);
+        skeletonCanvas.setVisible(false);
+        if (hasPose) {
+            loadAndDrawSkeleton(skeletonCanvas, skeletonUrl, poseData, dispW, dispH);
+        }
+
+        StackPane displayPane = new StackPane(imageView, skeletonCanvas);
+        displayPane.setPrefWidth(dispW);
+        displayPane.setPrefHeight(dispH);
+        displayPane.setMaxWidth(dispW);
+        displayPane.setStyle("-fx-background-color: #000000;");
+
+        viewGroup.selectedToggleProperty().addListener((obs, old, now) -> {
+            boolean showSkel = (now == btnSkeleton);
+            imageView.setVisible(!showSkel);
+            skeletonCanvas.setVisible(showSkel);
+        });
+
+        HBox toggleRow = new HBox(8, btnPhoto, btnSkeleton);
+        VBox imageSection = new VBox(8, toggleRow, displayPane);
+
+        // ── Panel de desglose de scores ───────────────────────────────────────
+        VBox scorePanel = buildDetailScorePanel(result);
+        scorePanel.setMinWidth(230);
+        scorePanel.setPrefWidth(250);
+
+        HBox content = new HBox(16, imageSection, scorePanel);
+        content.setAlignment(javafx.geometry.Pos.TOP_LEFT);
+        VBox.setVgrow(content, Priority.ALWAYS);
+
+        // ── Botones de acción ─────────────────────────────────────────────────
+        Button btnOpen = new Button(I18n.t("detail.openFile"));
+        btnOpen.setOnAction(e -> openResultSource(result));
+        btnOpen.setStyle(
+            "-fx-background-color: #1A3A5C;" +
+            "-fx-text-fill: #7EC8E3;" +
+            "-fx-font-size: 12px;" +
+            "-fx-padding: 7 16;" +
+            "-fx-background-radius: 6;" +
+            "-fx-cursor: hand;");
+
+        Button btnClose = new Button(I18n.t("detail.close"));
+        btnClose.setOnAction(e -> dialog.close());
+        btnClose.setStyle(
+            "-fx-background-color: #1C2A3A;" +
+            "-fx-text-fill: #607080;" +
+            "-fx-font-size: 12px;" +
+            "-fx-padding: 7 16;" +
+            "-fx-background-radius: 6;" +
+            "-fx-cursor: hand;");
+
+        javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        HBox bottomBar = new HBox(10, spacer, btnOpen, btnClose);
+        bottomBar.setAlignment(javafx.geometry.Pos.CENTER_RIGHT);
+
+        root.getChildren().addAll(titleLabel, content, bottomBar);
+
+        javafx.scene.Scene scene = new javafx.scene.Scene(root);
+        scene.setFill(javafx.scene.paint.Color.web("#0A1626"));
+        dialog.setScene(scene);
+        dialog.show();
+    }
+
+    /**
+     * Construye el panel de desglose de scores para el diálogo de detalle.
+     */
+    private VBox buildDetailScorePanel(ImageResult result) {
+        VBox box = new VBox(9);
+        box.setStyle(
+            "-fx-background-color: rgba(10,22,38,0.95);" +
+            "-fx-background-radius: 8;" +
+            "-fx-border-color: rgba(100,160,220,0.30);" +
+            "-fx-border-width: 1;" +
+            "-fx-border-radius: 8;" +
+            "-fx-padding: 14 14 14 14;");
+
+        Label title = new Label(I18n.t("pose.analysis"));
+        title.setStyle("-fx-text-fill: #B8D4EC; -fx-font-size: 12px; -fx-font-weight: bold;");
+        box.getChildren().add(title);
+
+        javafx.scene.layout.Region sep = new javafx.scene.layout.Region();
+        sep.setPrefHeight(1); sep.setMaxWidth(Double.MAX_VALUE);
+        sep.setStyle("-fx-background-color: rgba(100,160,220,0.22);");
+        box.getChildren().add(sep);
+
+        SimilarityBreakdown bd = result.getScoreBreakdown();
+        if (bd == null || !bd.hasData()) {
+            Label noData = new Label(I18n.t("pose.nodata"));
+            noData.setStyle("-fx-text-fill: #445566; -fx-font-size: 12px;");
+            box.getChildren().add(noData);
+            return box;
+        }
+
+        if (bd.hasEmbeddings()) {
+            box.getChildren().add(detailScoreRow(I18n.t("pose.embedding"), bd.cosine(),   "#18CC96"));
+        }
+        box.getChildren().add(detailScoreRow(I18n.t("pose.angles"),    bd.angles(),    colorForScore(bd.angles())));
+        if (bd.hasPositions()) {
+            box.getChildren().add(detailScoreRow(I18n.t("pose.positions"), bd.positions(), colorForScore(bd.positions())));
+        }
+        box.getChildren().add(detailScoreRow(I18n.t("pose.skeleton"),  bd.skeleton(),  colorForScore(bd.skeleton())));
+        box.getChildren().add(detailScoreRow(I18n.t("pose.contour"),   bd.contour(),   colorForScore(bd.contour())));
+        if (bd.coverage() < 0.97) {
+            box.getChildren().add(detailScoreRow(I18n.t("pose.coverage"), bd.coverage(), colorForScore(bd.coverage())));
+        }
+
+        javafx.scene.layout.Region sep2 = new javafx.scene.layout.Region();
+        sep2.setPrefHeight(1); sep2.setMaxWidth(Double.MAX_VALUE);
+        sep2.setStyle("-fx-background-color: rgba(100,160,220,0.14);");
+        box.getChildren().add(sep2);
+
+        Label pts = new Label("📍 " + bd.landmarkCount() + " " + I18n.t("pose.points")
+                + "   ✏ " + bd.jointCount() + " " + I18n.t("pose.joints"));
+        pts.setStyle("-fx-text-fill: #3D5468; -fx-font-size: 11px;");
+        box.getChildren().add(pts);
+
+        return box;
+    }
+
+    /** Fila de métrica para el diálogo de detalle. */
+    private HBox detailScoreRow(String name, double score, String color) {
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        Label nameLbl = new Label(name);
+        nameLbl.setMinWidth(80);
+        nameLbl.setStyle("-fx-text-fill: #8AACC4; -fx-font-size: 12px;");
+
+        double pct  = Math.max(0.0, Math.min(1.0, score));
+        double barW = 100.0;
+        javafx.scene.shape.Rectangle bg = new javafx.scene.shape.Rectangle(barW, 8);
+        bg.setFill(javafx.scene.paint.Color.web("rgba(255,255,255,0.08)"));
+        bg.setArcWidth(5); bg.setArcHeight(5);
+
+        javafx.scene.shape.Rectangle fill = new javafx.scene.shape.Rectangle(Math.max(3, barW * pct), 8);
+        fill.setFill(javafx.scene.paint.Color.web(color));
+        fill.setArcWidth(5); fill.setArcHeight(5);
+
+        StackPane bar = new StackPane(bg, fill);
+        StackPane.setAlignment(fill, Pos.CENTER_LEFT);
+
+        Label pctLbl = new Label(Math.round(pct * 100) + "%");
+        pctLbl.setStyle("-fx-text-fill: " + color + "; -fx-font-size: 12px; -fx-font-weight: bold;");
+        pctLbl.setMinWidth(38);
+
+        row.getChildren().addAll(nameLbl, bar, pctLbl);
+        return row;
+    }
+
+    /**
+     * Carga la imagen en un hilo de fondo y dibuja el esqueleto MediaPipe sobre el Canvas.
+     */
+    private void loadAndDrawSkeleton(Canvas skeletonCanvas, String imageUrl,
+                                     PoseData poseData, double canvasW, double canvasH) {
+        new Thread(() -> {
+            Image img = null;
+            if (imageUrl != null && !imageUrl.isBlank()) {
+                try {
+                    img = new Image(imageUrl, canvasW, canvasH, true, true);
+                } catch (Exception ex) {
+                    logger.warn("[SKELETON] Error cargando imagen: {}", ex.getMessage());
+                }
+            }
+            final Image finalImg = img;
+            Platform.runLater(() -> drawSkeletonOnCanvas(skeletonCanvas, finalImg, poseData, canvasW, canvasH));
+        }, "skeleton-loader").start();
+    }
+
+    /**
+     * Renderiza la imagen de referencia con el esqueleto MediaPipe superpuesto,
+     * usando colores auténticos por región corporal (izquierda=verde, derecha=rojo, centro=blanco)
+     * y transparencia ponderada por la visibilidad de cada landmark.
+     */
+    private void drawSkeletonOnCanvas(Canvas canvas, Image img, PoseData poseData,
+                                      double canvasW, double canvasH) {
+        GraphicsContext sgc = canvas.getGraphicsContext2D();
+        sgc.setFill(javafx.scene.paint.Color.BLACK);
+        sgc.fillRect(0, 0, canvasW, canvasH);
+
+        // Calcular letterbox fit
+        double ox = 0, oy = 0, drawW = canvasW, drawH = canvasH;
+        if (img != null && !img.isError() && img.getWidth() > 0 && img.getHeight() > 0) {
+            double scale = Math.min(canvasW / img.getWidth(), canvasH / img.getHeight());
+            drawW = img.getWidth() * scale;
+            drawH = img.getHeight() * scale;
+            ox = (canvasW - drawW) / 2.0;
+            oy = (canvasH - drawH) / 2.0;
+            sgc.drawImage(img, ox, oy, drawW, drawH);
+        }
+
+        // Superposición oscura semi-transparente para hacer destacar el esqueleto
+        sgc.setFill(javafx.scene.paint.Color.color(0, 0, 0, 0.42));
+        sgc.fillRect(0, 0, canvasW, canvasH);
+
+        Map<Integer, javafx.geometry.Point2D> landmarks = poseData.getAllLandmarks();
+        if (landmarks.isEmpty()) return;
+
+        boolean hasVis = poseData.hasVisibilityData();
+
+        // Dibujar conexiones con colores por región corporal (auténtico MediaPipe)
+        for (int[] conn : SKELETON_CONNECTIONS) {
+            javafx.geometry.Point2D a = landmarks.get(conn[0]);
+            javafx.geometry.Point2D b = landmarks.get(conn[1]);
+            if (a == null || b == null) continue;
+
+            double visA = hasVis ? poseData.getLandmarkVisibility(conn[0]) : 1.0;
+            double visB = hasVis ? poseData.getLandmarkVisibility(conn[1]) : 1.0;
+            if (visA < 0) visA = 1.0;
+            if (visB < 0) visB = 1.0;
+            double vis = (visA + visB) / 2.0;
+            if (vis < 0.15) continue;
+
+            double ax = ox + a.getX() * drawW, ay = oy + a.getY() * drawH;
+            double bx = ox + b.getX() * drawW, by = oy + b.getY() * drawH;
+
+            // Sombra negra gruesa para contraste
+            sgc.setStroke(javafx.scene.paint.Color.color(0, 0, 0, Math.min(1.0, vis * 0.75)));
+            sgc.setLineWidth(5.0);
+            sgc.strokeLine(ax, ay, bx, by);
+
+            // Línea de color (mezcla del color de ambos extremos)
+            javafx.scene.paint.Color lineColor = blendColors(
+                    withAlpha(getLandmarkColor(conn[0]), vis),
+                    withAlpha(getLandmarkColor(conn[1]), vis));
+            sgc.setStroke(lineColor);
+            sgc.setLineWidth(2.5);
+            sgc.strokeLine(ax, ay, bx, by);
+        }
+
+        // Dibujar nodos articulares con colores por región corporal
+        for (Map.Entry<Integer, javafx.geometry.Point2D> entry : landmarks.entrySet()) {
+            int id = entry.getKey();
+            javafx.geometry.Point2D lm = entry.getValue();
+            double x = ox + lm.getX() * drawW;
+            double y = oy + lm.getY() * drawH;
+
+            double vis = hasVis ? poseData.getLandmarkVisibility(id) : 1.0;
+            if (vis < 0) vis = 1.0;
+            if (vis < 0.15) continue;
+
+            javafx.scene.paint.Color dotColor = withAlpha(getLandmarkColor(id), vis);
+            double r = 5.0;
+
+            // Halo negro para contraste
+            sgc.setFill(javafx.scene.paint.Color.color(0, 0, 0, Math.min(1.0, vis * 0.80)));
+            sgc.fillOval(x - r - 2, y - r - 2, (r + 2) * 2, (r + 2) * 2);
+
+            // Disco de color exterior
+            sgc.setFill(dotColor);
+            sgc.fillOval(x - r, y - r, r * 2, r * 2);
+
+            // Centro blanco pequeño
+            sgc.setFill(javafx.scene.paint.Color.WHITE);
+            sgc.fillOval(x - 2, y - 2, 4, 4);
+        }
+    }
+
+    /** Devuelve el color MediaPipe para el landmark dado (izquierda=verde, derecha=rojo, centro=blanco). */
+    private static javafx.scene.paint.Color getLandmarkColor(int id) {
+        if (SKEL_LEFT_IDS.contains(id))  return SKEL_LEFT;
+        if (SKEL_RIGHT_IDS.contains(id)) return SKEL_RIGHT;
+        return SKEL_CENTER;
+    }
+
+    /** Devuelve un color con alpha ajustado al valor de visibilidad dado (mínimo 0.25). */
+    private static javafx.scene.paint.Color withAlpha(javafx.scene.paint.Color c, double alpha) {
+        return new javafx.scene.paint.Color(c.getRed(), c.getGreen(), c.getBlue(),
+                Math.max(0.25, Math.min(1.0, alpha)));
+    }
+
+    /** Mezcla dos colores a partes iguales, promediando también el alpha. */
+    private static javafx.scene.paint.Color blendColors(javafx.scene.paint.Color c1, javafx.scene.paint.Color c2) {
+        return new javafx.scene.paint.Color(
+                (c1.getRed()     + c2.getRed())     / 2.0,
+                (c1.getGreen()   + c2.getGreen())   / 2.0,
+                (c1.getBlue()    + c2.getBlue())    / 2.0,
+                (c1.getOpacity() + c2.getOpacity()) / 2.0);
+    }
+
     private Label buildScoreLabel(ImageResult result, int rank) {
         if (result.getScore() <= 0.0) {
             String title = result.getTitle() == null || result.getTitle().isBlank() ? "Ref" : result.getTitle();
@@ -1446,6 +1838,183 @@ public class DrawingController {
             sb.append("\n").append(I18n.fmt("tooltip.similarity", Math.round(result.getScore() * 100.0)));
         sb.append("\n").append(I18n.t("tooltip.open"));
         return sb.toString();
+    }
+
+    // ── Toolbar de usuario ────────────────────────────────────────────────────
+
+    /**
+     * Añade dinámicamente al toolbar los botones de usuario, historial,
+     * ajustes y logout. Se llaman desde initialize().
+     */
+    private void addUserToolbarButtons() {
+        if (toolBar == null) return;
+
+        javafx.scene.control.Separator sep = new javafx.scene.control.Separator(
+                javafx.geometry.Orientation.VERTICAL);
+
+        // Nombre del usuario activo
+        var session = org.refcolor.buscareferencias.auth.UserManager.getCurrentSession();
+        String userName = (session != null) ? session.username() : "Invitado";
+        Label lblUser = new Label("👤 " + userName);
+        lblUser.setStyle("-fx-text-fill: #BDC7C9; -fx-font-size: 12px; -fx-padding: 0 4;");
+
+        // Botón Historial
+        Button btnHistory = new Button("📋");
+        btnHistory.setStyle("-fx-background-color: transparent; -fx-text-fill: #BDC7C9; " +
+                            "-fx-font-size: 14px; -fx-cursor: hand;");
+        btnHistory.setTooltip(new javafx.scene.control.Tooltip(I18n.t("tooltip.history")));
+        btnHistory.setOnAction(e -> openHistoryScreen());
+
+        // Botón Ajustes
+        Button btnSettingsBtn = new Button("⚙");
+        btnSettingsBtn.setStyle("-fx-background-color: transparent; -fx-text-fill: #BDC7C9; " +
+                                "-fx-font-size: 14px; -fx-cursor: hand;");
+        btnSettingsBtn.setTooltip(new javafx.scene.control.Tooltip(I18n.t("tooltip.settings")));
+        btnSettingsBtn.setOnAction(e -> openSettingsScreen());
+
+        // Botón Guardar dibujo
+        Button btnSaveDraw = new Button("💾");
+        btnSaveDraw.setStyle("-fx-background-color: transparent; -fx-text-fill: #BDC7C9; " +
+                             "-fx-font-size: 14px; -fx-cursor: hand;");
+        btnSaveDraw.setTooltip(new javafx.scene.control.Tooltip(I18n.t("tooltip.saveDrawing")));
+        btnSaveDraw.setOnAction(e -> saveCurrentDrawingToHistory());
+
+        // Botón Logout (solo si no es invitado)
+        Button btnLogout = new Button("⏏");
+        btnLogout.setStyle("-fx-background-color: transparent; -fx-text-fill: #6B8FA3; " +
+                           "-fx-font-size: 14px; -fx-cursor: hand;");
+        btnLogout.setTooltip(new javafx.scene.control.Tooltip(I18n.t("tooltip.logout")));
+        btnLogout.setOnAction(e -> handleLogout());
+
+        toolBar.getItems().addAll(sep, lblUser, btnSaveDraw, btnHistory, btnSettingsBtn, btnLogout);
+    }
+
+    private void openHistoryScreen() {
+        try {
+            // Guardar Stage ANTES de reemplazar el root (canvas.getScene() pasa a null tras setRoot)
+            savedStage = (javafx.stage.Stage) canvas.getScene().getWindow();
+            var loader = new javafx.fxml.FXMLLoader(
+                org.refcolor.buscareferencias.BuscaReferenciasApp.class.getResource("history-view.fxml"));
+            javafx.scene.Parent root = loader.load();
+            HistoryController ctrl = loader.getController();
+            ctrl.setStage(savedStage);
+            ctrl.setOnBack(this::returnFromSubscreen);
+            savedStage.getScene().setRoot(root);
+        } catch (Exception e) {
+            logger.error("[UI] Error abriendo historial", e);
+        }
+    }
+
+    private void openSettingsScreen() {
+        try {
+            // Guardar Stage ANTES de reemplazar el root
+            savedStage = (javafx.stage.Stage) canvas.getScene().getWindow();
+            var loader = new javafx.fxml.FXMLLoader(
+                org.refcolor.buscareferencias.BuscaReferenciasApp.class.getResource("settings-view.fxml"));
+            javafx.scene.Parent root = loader.load();
+            SettingsController ctrl = loader.getController();
+            ctrl.setStage(savedStage);
+            ctrl.setOnBack(this::returnFromSubscreen);
+            savedStage.getScene().setRoot(root);
+        } catch (Exception e) {
+            logger.error("[UI] Error abriendo ajustes", e);
+        }
+    }
+
+    private void returnFromSubscreen() {
+        // Volver a la pantalla principal recargándola (usa savedStage porque canvas.getScene() es null)
+        try {
+            var loader = new javafx.fxml.FXMLLoader(
+                org.refcolor.buscareferencias.BuscaReferenciasApp.class.getResource("main-view.fxml"));
+            javafx.scene.Parent root = loader.load();
+            DrawingController ctrl = loader.getController();
+            if (ctrl != null) ctrl.setOnLogout(this.onLogout);
+            if (savedStage != null) {
+                savedStage.getScene().setRoot(root);
+            } else {
+                // Fallback: si savedStage es null, intentar desde el nodo de ajustes
+                logger.warn("[UI] savedStage es null en returnFromSubscreen");
+            }
+        } catch (Exception e) {
+            logger.error("[UI] Error volviendo a main", e);
+        }
+    }
+
+    private void handleLogout() {
+        org.refcolor.buscareferencias.auth.UserManager.logout();
+        if (onLogout != null) Platform.runLater(onLogout);
+    }
+
+    /**
+     * Guarda el estado actual del canvas como snapshot PNG en el directorio
+     * de la app y registra el dibujo en el historial de la BD.
+     */
+    private void saveCurrentDrawingToHistory() {
+        if (!canvasHasContent) {
+            statusLabel.setText("El lienzo está vacío — dibuja algo primero.");
+            return;
+        }
+        // Capturar snapshot del canvas
+        javafx.scene.image.WritableImage snap = new javafx.scene.image.WritableImage(
+                (int) canvas.getWidth(), (int) canvas.getHeight());
+        canvas.snapshot(null, snap);
+
+        new Thread(() -> {
+            try {
+                java.nio.file.Path snapshotDir = java.nio.file.Paths.get(
+                    System.getProperty("user.home"), ".buscareferencias", "snapshots");
+                java.nio.file.Files.createDirectories(snapshotDir);
+                String fileName = "draw_" + System.currentTimeMillis() + ".png";
+                java.nio.file.Path snapshotFile = snapshotDir.resolve(fileName);
+
+                // Guardar imagen como PNG usando PixelReader (sin SwingFXUtils)
+                writePng(snap, snapshotFile.toFile());
+
+                // Registrar en BD
+                int userId = org.refcolor.buscareferencias.auth.UserManager.getCurrentUserId();
+                String poseJson = lastAnalyzedPose != null ? lastAnalyzedPose.getJointsJson() : "{}";
+                // Insertar dibujo en BD y obtener id
+                int idDibujo = org.refcolor.buscareferencias.database.DatabaseManager
+                    .saveDrawing(lastAnalyzedPose != null ? lastAnalyzedPose
+                               : new org.refcolor.buscareferencias.model.PoseData(),
+                               java.util.List.of(), java.util.List.of());
+                if (idDibujo > 0) {
+                    org.refcolor.buscareferencias.database.DatabaseManager
+                        .saveSnapshotPath(idDibujo, snapshotFile.toAbsolutePath().toString());
+                    org.refcolor.buscareferencias.database.DatabaseManager
+                        .incrementUserStats(userId, false);
+                }
+
+                Platform.runLater(() ->
+                    statusLabel.setText("✓ Dibujo guardado en el historial."));
+            } catch (Exception e) {
+                logger.error("[DRAW] Error guardando snapshot", e);
+                Platform.runLater(() ->
+                    statusLabel.setText("Error al guardar el dibujo."));
+            }
+        }, "save-snapshot").start();
+    }
+
+    /**
+     * Escribe un WritableImage de JavaFX como archivo PNG sin usar SwingFXUtils.
+     * Usa PixelReader + javax.imageio directamente sobre un BufferedImage construido
+     * manualmente con el tipo TYPE_INT_ARGB.
+     */
+    private static void writePng(javafx.scene.image.WritableImage img, java.io.File dest)
+            throws java.io.IOException {
+        int w = (int) img.getWidth();
+        int h = (int) img.getHeight();
+        javafx.scene.image.PixelReader pr = img.getPixelReader();
+        // TYPE_INT_ARGB = 2
+        java.awt.image.BufferedImage bi =
+            new java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int argb = pr.getArgb(x, y);
+                bi.setRGB(x, y, argb);
+            }
+        }
+        javax.imageio.ImageIO.write(bi, "png", dest);
     }
 
     private void openResultSource(ImageResult result) {

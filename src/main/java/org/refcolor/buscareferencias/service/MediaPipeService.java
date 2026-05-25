@@ -124,13 +124,22 @@ public class MediaPipeService {
                 return new PoseData();
             }
 
-            Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
-            PythonImageSearchClient.CommandResult result = PythonImageSearchClient.runPythonScript(
-                    scriptPath,
-                    List.of(imageSource),
-                    scriptPath != null ? scriptPath.getParent() : null,
-                    60
-            );
+            // ── Prioridad 1: pose_analyzer.exe embebido ───────────────────────
+            Path bundledExe = PythonImageSearchClient.getBundledAnalyzerExe();
+            PythonImageSearchClient.CommandResult result;
+            if (bundledExe != null) {
+                logger.info("[MEDIAPIPE] Analizando con exe embebido: {}", imageSource);
+                result = PythonImageSearchClient.runExe(bundledExe, List.of(imageSource), 60);
+            } else {
+                // ── Prioridad 2: Python + pose_analyzer.py ────────────────────
+                Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
+                result = PythonImageSearchClient.runPythonScript(
+                        scriptPath,
+                        List.of(imageSource),
+                        scriptPath != null ? scriptPath.getParent() : null,
+                        60
+                );
+            }
 
                     if (result.succeeded()) {
                 String outStr = result.stdout();
@@ -172,18 +181,27 @@ public class MediaPipeService {
             return results;
         }
 
-        Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
-        if (scriptPath == null) {
-            logger.warn("[BATCH] Script pose_analyzer.py no encontrado; batch cancelado.");
-            return results;
-        }
-
-        // Timeout generoso: ~3 s por imagen es más que suficiente
         int timeoutSeconds = Math.max(120, imagePaths.size() * 3);
-        logger.info("[BATCH] Analizando {} imágenes en un solo proceso Python (timeout {}s)…",
-                imagePaths.size(), timeoutSeconds);
+        List<String> jsonLines;
 
-        List<String> jsonLines = PythonImageSearchClient.runBatchScript(scriptPath, imagePaths, timeoutSeconds, onImageDone);
+        // ── Prioridad 1: pose_analyzer.exe embebido (bundle PyInstaller) ────────
+        // En el app-image instalado solo existe el .exe; pose_analyzer.py no está.
+        Path bundledExe = PythonImageSearchClient.getBundledAnalyzerExe();
+        if (bundledExe != null) {
+            logger.info("[BATCH] Usando pose_analyzer.exe embebido ({} imgs, timeout {}s): {}",
+                    imagePaths.size(), timeoutSeconds, bundledExe);
+            jsonLines = PythonImageSearchClient.runExeBatch(bundledExe, imagePaths, timeoutSeconds, onImageDone);
+        } else {
+            // ── Prioridad 2: Python + pose_analyzer.py (modo desarrollo) ─────────
+            Path scriptPath = PythonImageSearchClient.resolveProjectScript("pose_analyzer.py");
+            if (scriptPath == null) {
+                logger.warn("[BATCH] pose_analyzer.py no encontrado y pose_analyzer.exe no disponible; batch cancelado.");
+                return results;
+            }
+            logger.info("[BATCH] Analizando {} imágenes en un solo proceso Python (timeout {}s)…",
+                    imagePaths.size(), timeoutSeconds);
+            jsonLines = PythonImageSearchClient.runBatchScript(scriptPath, imagePaths, timeoutSeconds, onImageDone);
+        }
 
         for (String line : jsonLines) {
             try {

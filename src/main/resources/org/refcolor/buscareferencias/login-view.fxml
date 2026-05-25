@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.geometry.Insets?>
+
+<StackPane xmlns="http://javafx.com/javafx"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="org.refcolor.buscareferencias.controller.LoginController"
+           stylesheets="@style.css">
+
+    <VBox alignment="CENTER" spacing="20" maxWidth="420" minWidth="340">
+        <padding><Insets top="50" bottom="50" left="40" right="40"/></padding>
+
+        <!-- Título dinámico (Login / Registro) -->
+        <VBox alignment="CENTER" spacing="6">
+            <Label text="◆" style="-fx-text-fill: #845460; -fx-font-size: 32px;"/>
+            <Label fx:id="lblTitle" text="Iniciar sesión"
+                   style="-fx-text-fill: #EAD3CB; -fx-font-size: 22px; -fx-font-weight: bold;"/>
+            <Label fx:id="lblSubtitle" text="Accede a tu historial y ajustes personalizados"
+                   style="-fx-text-fill: #BDC7C9; -fx-font-size: 12px;" wrapText="true"
+                   alignment="CENTER"/>
+        </VBox>
+
+        <!-- Formulario -->
+        <VBox spacing="10">
+            <Label text="Usuario" style="-fx-text-fill: #BDC7C9; -fx-font-size: 12px;"/>
+            <TextField fx:id="txtUsername" promptText="Nombre de usuario"
+                       style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                              -fx-prompt-text-fill: #6B8FA3; -fx-border-color: rgba(132,84,96,0.4);
+                              -fx-border-radius: 6; -fx-background-radius: 6;
+                              -fx-padding: 10 14; -fx-font-size: 13px;"/>
+
+            <Label fx:id="lblPasswordLabel" text="Contraseña"
+                   style="-fx-text-fill: #BDC7C9; -fx-font-size: 12px;"/>
+            <!-- Stack: PasswordField (oculto) y TextField (visible) superpuestos -->
+            <StackPane>
+                <PasswordField fx:id="txtPassword" promptText="Contraseña (mín. 4 caracteres)"
+                               style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                                      -fx-prompt-text-fill: #6B8FA3; -fx-border-color: rgba(132,84,96,0.4);
+                                      -fx-border-radius: 6; -fx-background-radius: 6;
+                                      -fx-padding: 10 14; -fx-font-size: 13px;"/>
+                <TextField fx:id="txtPasswordVisible" promptText="Contraseña (mín. 4 caracteres)"
+                           style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                                  -fx-prompt-text-fill: #6B8FA3; -fx-border-color: rgba(132,84,96,0.4);
+                                  -fx-border-radius: 6; -fx-background-radius: 6;
+                                  -fx-padding: 10 14; -fx-font-size: 13px;"
+                           visible="false" managed="false"/>
+            </StackPane>
+            <CheckBox fx:id="chkShowPassword" text="Mostrar contraseña" onAction="#handleShowPassword"
+                      style="-fx-text-fill: #6B8FA3; -fx-font-size: 11px;"/>
+
+            <!-- Confirmación de contraseña (solo en registro) -->
+            <Label fx:id="lblConfirm" text="Confirmar contraseña"
+                   style="-fx-text-fill: #BDC7C9; -fx-font-size: 12px;" visible="false" managed="false"/>
+            <StackPane fx:id="stkConfirm" visible="false" managed="false">
+                <PasswordField fx:id="txtConfirm" promptText="Repite la contraseña"
+                               style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                                      -fx-prompt-text-fill: #6B8FA3; -fx-border-color: rgba(132,84,96,0.4);
+                                      -fx-border-radius: 6; -fx-background-radius: 6;
+                                      -fx-padding: 10 14; -fx-font-size: 13px;"/>
+                <TextField fx:id="txtConfirmVisible" promptText="Repite la contraseña"
+                           style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                                  -fx-prompt-text-fill: #6B8FA3; -fx-border-color: rgba(132,84,96,0.4);
+                                  -fx-border-radius: 6; -fx-background-radius: 6;
+                                  -fx-padding: 10 14; -fx-font-size: 13px;"
+                           visible="false" managed="false"/>
+            </StackPane>
+        </VBox>
+
+        <!-- Mensaje de error/info -->
+        <Label fx:id="lblMessage" text="" wrapText="true"
+               style="-fx-text-fill: #E07070; -fx-font-size: 12px;" alignment="CENTER"
+               maxWidth="Infinity"/>
+
+        <!-- Botón de acción principal -->
+        <Button fx:id="btnAction" text="Iniciar sesión" onAction="#handleAction"
+                maxWidth="Infinity"
+                style="-fx-background-color: #845460; -fx-text-fill: #FAF8F6;
+                       -fx-font-size: 14px; -fx-font-weight: bold;
+                       -fx-padding: 12 24; -fx-background-radius: 8; -fx-cursor: hand;"/>
+
+        <!-- Cambiar modo login/registro -->
+        <HBox alignment="CENTER" spacing="6">
+            <Label fx:id="lblSwitchText" text="¿No tienes cuenta?"
+                   style="-fx-text-fill: #6B8FA3; -fx-font-size: 12px;"/>
+            <Hyperlink fx:id="lnkSwitch" text="Crear cuenta" onAction="#handleSwitch"
+                       style="-fx-text-fill: #EAD3CB; -fx-font-size: 12px;"/>
+        </HBox>
+
+        <!-- Volver -->
+        <Button fx:id="btnBack" text="← Volver" onAction="#handleBack"
+                style="-fx-background-color: transparent; -fx-text-fill: #6B8FA3;
+                       -fx-font-size: 12px; -fx-cursor: hand;"/>
+    </VBox>
+</StackPane>

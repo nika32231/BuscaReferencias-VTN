@@ -65,6 +65,9 @@ public final class PoseToleranceConfig {
 
     /** Cuántas fotos nuevas analizar con MediaPipe por búsqueda (las ya cacheadas no cuentan). */
     public static int analysisLimitPerSearch() {
+        // El ajuste del usuario (AppSettings) tiene prioridad sobre el feature flag
+        int userSetting = org.refcolor.buscareferencias.settings.AppSettings.getPhotosPerRound();
+        if (userSetting > 0) return Math.max(50, Math.min(5000, userSetting));
         return parseInt(FeatureFlags.getRaw("search.analysis.limit"), DEFAULT_ANALYSIS_LIMIT, 50, 5000);
     }
 

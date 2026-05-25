@@ -33,6 +33,23 @@
     -fx-background-color: #0D1B26;
 }
 
+/* ── Paneles de sección (ajustes, historial) ─────────────── */
+
+.app-section {
+    -fx-background-color: #12263A;
+    -fx-background-radius: 10;
+    -fx-border-color: rgba(100,150,200,0.2);
+    -fx-border-radius: 10;
+    -fx-padding: 16;
+}
+
+.app-header {
+    -fx-background-color: #12263A;
+    -fx-padding: 14 20;
+    -fx-border-color: transparent transparent rgba(132,84,96,0.3) transparent;
+    -fx-border-width: 0 0 1 0;
+}
+
 /* ── Marca / Brand mark ──────────────────────────────────── */
 
 .brand-mark {

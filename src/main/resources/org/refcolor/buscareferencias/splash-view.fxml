@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.Insets?>
+
+<StackPane xmlns="http://javafx.com/javafx"
+           xmlns:fx="http://javafx.com/fxml"
+           fx:controller="org.refcolor.buscareferencias.controller.SplashController"
+           stylesheets="@style.css"
+           style="-fx-background-color: #0D1B26;">
+
+    <VBox alignment="CENTER" spacing="32" maxWidth="420" minWidth="340">
+        <padding><Insets top="60" bottom="60" left="40" right="40"/></padding>
+
+        <!-- Logo / Marca -->
+        <VBox alignment="CENTER" spacing="8">
+            <Label text="◆" style="-fx-text-fill: #845460; -fx-font-size: 52px;
+                         -fx-effect: dropshadow(gaussian,rgba(132,84,96,0.7),18,0,0,0);"/>
+            <Label text="Referencias" style="-fx-text-fill: #EAD3CB; -fx-font-size: 26px;
+                         -fx-font-weight: bold; -fx-letter-spacing: 2;"/>
+            <Label text="Buscador de Poses por Color" style="-fx-text-fill: #BDC7C9; -fx-font-size: 13px;"/>
+        </VBox>
+
+        <!-- Separador -->
+        <Separator style="-fx-background-color: rgba(132,84,96,0.4);"/>
+
+        <!-- Botones principales -->
+        <VBox spacing="12" alignment="CENTER">
+            <Button fx:id="btnLogin" text="🔑  Iniciar sesión" onAction="#handleLogin"
+                    maxWidth="Infinity"
+                    style="-fx-background-color: #845460; -fx-text-fill: #FAF8F6;
+                           -fx-font-size: 14px; -fx-font-weight: bold;
+                           -fx-padding: 12 24; -fx-background-radius: 8; -fx-cursor: hand;"/>
+            <Button fx:id="btnRegister" text="✨  Crear cuenta" onAction="#handleRegister"
+                    maxWidth="Infinity"
+                    style="-fx-background-color: #1C3A50; -fx-text-fill: #EAD3CB;
+                           -fx-font-size: 14px; -fx-border-color: rgba(132,84,96,0.5);
+                           -fx-border-radius: 8; -fx-padding: 11 24;
+                           -fx-background-radius: 8; -fx-cursor: hand;"/>
+            <Button fx:id="btnGuest" text="👤  Continuar como invitado" onAction="#handleGuest"
+                    maxWidth="Infinity"
+                    style="-fx-background-color: transparent; -fx-text-fill: #6B8FA3;
+                           -fx-font-size: 12px; -fx-padding: 8 24; -fx-cursor: hand;"/>
+        </VBox>
+
+        <!-- Separador -->
+        <Separator style="-fx-background-color: rgba(100,150,200,0.2);"/>
+
+        <!-- Ajustes (accesible antes de loguearse) -->
+        <Button fx:id="btnSettings" text="⚙  Ajustes" onAction="#handleSettings"
+                style="-fx-background-color: transparent; -fx-text-fill: #BDC7C9;
+                       -fx-font-size: 12px; -fx-cursor: hand;"/>
+
+        <!-- Versión -->
+        <Label fx:id="lblVersion" text="v1.0" style="-fx-text-fill: #2B4F60; -fx-font-size: 11px;"/>
+    </VBox>
+</StackPane>

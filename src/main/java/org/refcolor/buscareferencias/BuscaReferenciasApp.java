@@ -9,9 +9,11 @@ import javafx.geometry.Rectangle2D;
 import javafx.stage.Screen;
 import javafx.stage.Stage;
 import org.refcolor.buscareferencias.controller.DrawingController;
+import org.refcolor.buscareferencias.controller.SplashController;
 import org.refcolor.buscareferencias.core.FallbackUi;
 import org.refcolor.buscareferencias.core.FeatureFlags;
 import org.refcolor.buscareferencias.database.DatabaseManager;
+import org.refcolor.buscareferencias.settings.AppSettings;
 import org.refcolor.buscareferencias.client.PythonImageSearchClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,18 +34,18 @@ public class BuscaReferenciasApp extends Application {
         logger.info("[STARTUP] start() begin  safeMode={} thread={}", safeMode, Thread.currentThread().getName());
 
         Scene scene;
-        FXMLLoader fxmlLoader = new FXMLLoader(BuscaReferenciasApp.class.getResource("main-view.fxml"));
+        FXMLLoader fxmlLoader = new FXMLLoader(BuscaReferenciasApp.class.getResource("splash-view.fxml"));
 
         try {
             if (FeatureFlags.forceFallbackUi()) {
                 throw new IllegalStateException("ui.forceFallback=true (forzado)");
             }
-            logger.info("[STARTUP] Cargando FXML...");
+            logger.info("[STARTUP] Cargando pantalla inicial (splash)...");
             Parent root = fxmlLoader.load();
-            scene = new Scene(root, 1400, 900);
+            scene = new Scene(root, 480, 640);
         } catch (Exception e) {
-            logger.error("[STARTUP] Error cargando UI principal, activando fallback", e);
-            scene = FallbackUi.createFallbackScene("Error cargando UI principal (FXML)", e);
+            logger.error("[STARTUP] Error cargando splash, activando fallback", e);
+            scene = FallbackUi.createFallbackScene("Error cargando pantalla inicial", e);
         }
 
         logger.info("[STARTUP] UI preparada en {} ms", Duration.between(t0, Instant.now()).toMillis());
@@ -77,11 +79,13 @@ public class BuscaReferenciasApp extends Application {
             }
         }
 
-        // Inyectar HostServices (si el controller existe)
+        // Inyectar Stage en SplashController
         try {
-            DrawingController controller = fxmlLoader.getController();
-            if (controller != null) {
-                controller.setHostServices(getHostServices());
+            Object ctrl = fxmlLoader.getController();
+            if (ctrl instanceof SplashController splash) {
+                splash.setStage(stage);
+            } else if (ctrl instanceof DrawingController dc) {
+                dc.setHostServices(getHostServices());
             }
         } catch (Exception e) {
             logger.error("[STARTUP] Error configurando controller", e);
@@ -90,15 +94,12 @@ public class BuscaReferenciasApp extends Application {
         stage.setTitle("Buscador de Referencias por Colores");
         stage.setScene(scene);
         stage.setMinWidth(360);
-        stage.setMinHeight(620);
+        stage.setMinHeight(500);
 
-        Rectangle2D visualBounds = Screen.getPrimary().getVisualBounds();
-        if (visualBounds.getWidth() >= 1280) {
-            stage.setMaximized(true);
-        } else {
-            stage.setWidth(Math.min(1100, visualBounds.getWidth()));
-            stage.setHeight(Math.min(850, visualBounds.getHeight()));
-        }
+        // Splash: tamaño compacto; se expande al entrar a la app
+        stage.setWidth(480);
+        stage.setHeight(640);
+        stage.centerOnScreen();
 
         logger.info("[STARTUP] stage.show()...");
         stage.show();

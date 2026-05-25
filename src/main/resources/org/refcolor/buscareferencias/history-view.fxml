@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+<?import javafx.scene.image.*?>
+<?import javafx.geometry.Insets?>
+
+<BorderPane xmlns="http://javafx.com/javafx"
+            xmlns:fx="http://javafx.com/fxml"
+            fx:controller="org.refcolor.buscareferencias.controller.HistoryController"
+            stylesheets="@style.css">
+
+    <!-- Cabecera -->
+    <top>
+        <HBox alignment="CENTER_LEFT" spacing="12" styleClass="app-header">
+            <Button text="←" onAction="#handleBack"
+                    style="-fx-background-color: transparent; -fx-text-fill: #BDC7C9;
+                           -fx-font-size: 16px; -fx-cursor: hand; -fx-padding: 4 8;"/>
+            <Label fx:id="lblTitle" text="📋 Historial de dibujos"
+                   style="-fx-text-fill: #EAD3CB; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+            <javafx.scene.layout.Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="lblUser" text="" style="-fx-text-fill: #6B8FA3; -fx-font-size: 12px;"/>
+        </HBox>
+    </top>
+
+    <!-- Empty state -->
+    <center>
+        <StackPane>
+            <VBox fx:id="emptyState" alignment="CENTER" spacing="12" visible="false" managed="false">
+                <Label text="📝" style="-fx-font-size: 48px;"/>
+                <Label fx:id="lblEmptyTitle" text="No hay dibujos guardados"
+                       style="-fx-text-fill: #6B8FA3; -fx-font-size: 14px;"/>
+                <Label fx:id="lblEmptySubtitle" text="Cuando guardes un dibujo desde la app, aparecerá aquí."
+                       style="-fx-text-fill: #445566; -fx-font-size: 12px;" wrapText="true"
+                       alignment="CENTER"/>
+            </VBox>
+
+            <ScrollPane fx:id="scrollPane" fitToWidth="true"
+                        style="-fx-background: transparent; -fx-background-color: transparent;">
+                <!-- Centrado en escritorio: FlowPane con padding lateral automático -->
+                <FlowPane fx:id="historyGrid" hgap="16" vgap="16"
+                          style="-fx-padding: 24;" alignment="TOP_LEFT">
+                    <!-- Los elementos se generan dinámicamente -->
+                </FlowPane>
+            </ScrollPane>
+        </StackPane>
+    </center>
+</BorderPane>

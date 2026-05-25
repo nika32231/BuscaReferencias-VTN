@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════════════════════
+   BUSCA REFERENCIAS  ·  Tema claro (override sobre style.css)
+   ─────────────────────────────────────────────────────────
+   Aplica sobre el tema oscuro; sobrescribe solo las propiedades
+   de color para ofrecer una apariencia clara y limpia.
+   ═══════════════════════════════════════════════════════════ */
+
+.root {
+    -fx-background-color: #F5F7FA;
+    -fx-base: #E8EDF2;
+    -fx-control-inner-background: #FFFFFF;
+    -fx-text-background-color: #1A2533;
+    -fx-accent: #845460;
+}
+
+.app-section {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: rgba(0,0,0,0.08);
+}
+
+.app-header {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: transparent transparent rgba(0,0,0,0.1) transparent;
+}
+
+.tool-bar, .toolbar-scroll, .toolbar-scroll > .viewport {
+    -fx-background-color: #FFFFFF;
+}
+
+.tool-bar {
+    -fx-border-color: transparent transparent rgba(132,84,96,0.2) transparent;
+}
+
+.tool-bar .button, .tool-bar .toggle-button {
+    -fx-background-color: #EAEEF3;
+    -fx-text-fill: #1A2533;
+    -fx-border-color: rgba(0,0,0,0.08);
+}
+
+.tool-bar .button:hover, .tool-bar .toggle-button:hover {
+    -fx-background-color: #D8DFE9;
+}
+
+.tool-bar .toggle-button:selected {
+    -fx-background-color: #845460;
+    -fx-text-fill: white;
+}
+
+.side-palette {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: rgba(0,0,0,0.08) rgba(0,0,0,0.08) rgba(0,0,0,0.08) transparent;
+}
+
+.section-title {
+    -fx-text-fill: #4A5568;
+}
+
+.palette-pill-button {
+    -fx-background-color: #EDF2F7;
+    -fx-text-fill: #2D3748;
+    -fx-border-color: rgba(0,0,0,0.1);
+}
+
+.palette-pill-button:selected {
+    -fx-background-color: #845460;
+    -fx-text-fill: white;
+}
+
+.image-card {
+    -fx-background-color: #FFFFFF;
+    -fx-border-color: rgba(0,0,0,0.1);
+    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.1), 6, 0, 0, 2);
+}
+
+.image-card:hover {
+    -fx-background-color: #F7FAFC;
+    -fx-border-color: #845460;
+}
+
+#statusLabel {
+    -fx-text-fill: #4A5568;
+}
+
+.status-prefix {
+    -fx-text-fill: #6B8FA3;
+}
+
+.canvas-hint-label {
+    -fx-text-fill: rgba(74,85,104,0.5);
+}
+
+.progress-bar > .track {
+    -fx-background-color: #E2E8F0;
+}
+
+.split-pane {
+    -fx-background-color: #F0F4F8;
+}
+
+.split-pane-divider {
+    -fx-background-color: #CBD5E0;
+}
+
+.flat-scroll, .flat-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+
+.gallery-rank {
+    -fx-text-fill: #FFFFFF;
+    -fx-background-color: rgba(0,0,0,0.55);
+}
