@@ -1,0 +1,125 @@
+====================================================
+INSTRUCCIONES DE INSTALACION Y PUESTA EN MARCHA
+====================================================
+
+
+----------------------------------------------------
+REQUISITOS PREVIOS
+----------------------------------------------------
+
+  - Java JDK 17 o superior
+      Comprobacion: java -version
+
+  - Maven 3.8 o superior
+      Comprobacion: mvn -version
+
+  - Python 3.10 o superior
+      Comprobacion: python --version
+
+NOTA: En Windows, si tienes varias versiones de Python instaladas,
+asegurate de que la que aparece en el PATH sea 3.10 o superior.
+Si no, indica la ruta completa en app.properties con la clave python.path.
+
+
+----------------------------------------------------
+PASO 1 - CLONAR EL REPOSITORIO
+----------------------------------------------------
+
+  git clone <URL-del-repositorio>
+  cd BuscaReferencias
+
+
+----------------------------------------------------
+PASO 2 - INSTALAR DEPENDENCIAS PYTHON
+----------------------------------------------------
+
+  pip install mediapipe opencv-python numpy
+
+  O usando el entorno virtual incluido (.venv):
+
+    Windows:
+      .venv\Scripts\activate
+      pip install mediapipe opencv-python numpy
+
+    Linux / macOS:
+      source .venv/bin/activate
+      pip install mediapipe opencv-python numpy
+
+
+----------------------------------------------------
+PASO 3 - MODELO DE DETECCION DE POSES (MEDIAPIPE)
+----------------------------------------------------
+
+El archivo Python/pose_landmarker_lite.task ya esta incluido
+en el repositorio.
+
+Si faltara, se descarga automaticamente la primera vez que
+se ejecuta un analisis (requiere conexion a internet).
+
+
+----------------------------------------------------
+PASO 4 - COMPILAR Y EJECUTAR LA APLICACION
+----------------------------------------------------
+
+  OPCION A - Ejecutar con Maven (recomendado para desarrollo):
+
+      mvn clean javafx:run
+
+
+  OPCION B - Generar un JAR y ejecutar:
+
+      mvn clean package
+      java --module-path <ruta-javafx-sdk>/lib --add-modules javafx.controls,javafx.fxml -jar target/busca-referencias-1.0-SNAPSHOT.jar
+
+
+  OPCION C - Ejecutar el instalador (si se dispone de el):
+
+      Ejecutar directamente en Windows. No requiere Maven ni Java
+      instalado por separado si el instalador los incluye.
+
+
+----------------------------------------------------
+PASO 5 - PRIMERA EJECUCION
+----------------------------------------------------
+
+Al arrancar por primera vez ocurre lo siguiente:
+
+  1. Se crea automaticamente la base de datos en cache/buscareferencias.db
+  2. Se comprueba que Python y MediaPipe estan disponibles.
+  3. Aparece la pantalla de login.
+     El primer usuario registrado se convierte en administrador.
+
+
+----------------------------------------------------
+PASO 6 - ANADIR IMAGENES DE REFERENCIA
+----------------------------------------------------
+
+Las imagenes de referencia deben colocarse en:
+
+    cache/thumbnails/
+
+Formatos admitidos: .jpg  .jpeg  .png
+
+Para cambiar esta ruta, edita search.local.dir en app.properties.
+
+
+----------------------------------------------------
+SOLUCION DE PROBLEMAS COMUNES
+----------------------------------------------------
+
+  "Python no encontrado"
+      Establece python.path en app.properties con la ruta
+      completa al ejecutable de Python.
+      Ejemplo: python.path=C:/Python311/python.exe
+
+  "MediaPipe no instalado"
+      Ejecuta: pip install mediapipe opencv-python numpy
+      en el entorno de Python configurado.
+
+  La aplicacion abre en modo de respaldo (sin interfaz grafica)
+      Asegurate de que JavaFX 21 este disponible y que
+      ui.forceFallback=false en app.properties.
+
+  No aparecen resultados en la busqueda
+      Comprueba que hay imagenes en cache/thumbnails/ y que
+      search.min.score no sea demasiado alto (valor recomendado: 0.40).

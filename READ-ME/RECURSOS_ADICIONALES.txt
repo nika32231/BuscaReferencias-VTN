@@ -1,0 +1,97 @@
+====================================================
+RECURSOS ADICIONALES PARA REPRODUCIR EL PROYECTO
+====================================================
+
+
+----------------------------------------------------
+ESTRUCTURA DE CARPETAS NECESARIA
+----------------------------------------------------
+
+  BuscaReferencias/
+  |
+  +-- src/                            Codigo fuente Java
+  |
+  +-- Python/
+  |   +-- pose_analyzer.py            Script de analisis de poses
+  |   +-- pose_landmarker_lite.task   Modelo MediaPipe (incluido en el repo)
+  |
+  +-- cache/
+  |   +-- thumbnails/                 Imagenes de referencia (carpeta de trabajo)
+  |
+  +-- pom.xml                         Configuracion del proyecto Maven
+  |
+  +-- src/main/resources/
+      +-- app.properties              Configuracion de la aplicacion
+
+
+----------------------------------------------------
+DEPENDENCIAS JAVA
+(se descargan automaticamente con Maven)
+----------------------------------------------------
+
+  JavaFX Controls       21.0.6       Interfaz grafica
+  JavaFX FXML           21.0.6       Definicion de vistas
+  SQLite JDBC           3.46.0.0     Base de datos local
+  SLF4J                 2.0.13       Logging
+  Logback               1.5.6        Implementacion de logging
+  org.json              20231013     Parseo de JSON (respuestas de Python)
+  JUnit Jupiter         5.12.1       Tests unitarios
+
+
+----------------------------------------------------
+DEPENDENCIAS PYTHON
+(instalar manualmente con pip)
+----------------------------------------------------
+
+  mediapipe             Deteccion de landmarks de pose corporal
+  opencv-python         Lectura y preprocesado de imagenes
+  numpy                 Calculo de angulos y embeddings
+
+  Comando de instalacion:
+      pip install mediapipe opencv-python numpy
+
+
+----------------------------------------------------
+MODELO DE IA INCLUIDO
+----------------------------------------------------
+
+  Archivo:    Python/pose_landmarker_lite.task
+  Origen:     Google MediaPipe - Pose Landmarker Lite (float16)
+  Tamano:     Aproximadamente 5 MB
+  Licencia:   Apache 2.0
+
+  Si el archivo no esta en el repositorio, se descarga
+  automaticamente al ejecutar el script por primera vez
+  (requiere conexion a internet).
+
+
+----------------------------------------------------
+BASE DE DATOS
+----------------------------------------------------
+
+  Motor:      SQLite (sin servidor, archivo local)
+  Archivo:    cache/buscareferencias.db
+
+  Se crea automaticamente al primer arranque.
+  No es necesario importar ningun esquema manualmente.
+
+  Para inspeccionar la base de datos manualmente se puede usar
+  DB Browser for SQLite (https://sqlitebrowser.org/) u otra
+  herramienta compatible con SQLite.
+
+
+----------------------------------------------------
+NOTAS SOBRE EL ENTORNO DE DESARROLLO
+----------------------------------------------------
+
+  - El proyecto fue desarrollado con IntelliJ IDEA.
+    La carpeta .idea/ esta incluida con configuracion basica.
+
+  - Tambien puede importarse en cualquier IDE compatible con Maven
+    (Eclipse, VS Code con extension Java, etc.).
+
+  - El script Python fue probado con Python 3.13.
+    Es compatible con Python 3.10 en adelante.
+
+  - Para ejecutar los tests:
+      mvn test

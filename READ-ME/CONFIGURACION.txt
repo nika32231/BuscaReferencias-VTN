@@ -1,0 +1,94 @@
+====================================================
+ARCHIVOS DE CONFIGURACION
+====================================================
+
+
+----------------------------------------------------
+1. src/main/resources/app.properties
+----------------------------------------------------
+
+Este es el archivo de configuracion principal de la aplicacion.
+Se carga automaticamente al arrancar.
+
+
+OPCIONES DISPONIBLES:
+
+  app.safeMode                  (default: false)
+      Modo seguro. Desactiva funciones experimentales.
+
+  ui.forceFallback              (default: false)
+      Forzar interfaz de respaldo sin JavaFX.
+
+  features.dbInitOnStartup      (default: true)
+      Inicializar la base de datos al arrancar.
+
+  features.depsCheckOnStartup   (default: true)
+      Comprobar dependencias Python al arrancar.
+
+  features.mediapipe.debug      (default: false)
+      Mostrar logs de depuracion de MediaPipe.
+
+  python.path                   (default: vacio)
+      Ruta manual al ejecutable de Python.
+      Ejemplo: C:/Python311/python.exe
+
+  search.local.dir              (default: cache/thumbnails)
+      Carpeta con las imagenes de referencia.
+
+  search.min.results            (default: 5)
+      Minimo de resultados a mostrar.
+
+  search.max.results            (default: 10)
+      Maximo de resultados a mostrar.
+
+  search.analysis.limit         (default: 100)
+      Fotos nuevas analizadas con MediaPipe por busqueda.
+
+  search.min.score              (default: 0.40)
+      Similitud minima (0.0 a 1.0) para mostrar un resultado.
+
+  tolerance.skeleton.default    (default: 2.0)
+      Tolerancia de posicion por defecto para partes del cuerpo.
+
+  tolerance.angle.arm           (default: 60)
+      Tolerancia en grados para angulos de brazo.
+
+  tolerance.angle.leg           (default: 60)
+      Tolerancia en grados para angulos de pierna.
+
+
+COMO SOBREESCRIBIR VALORES SIN EDITAR EL ARCHIVO:
+
+  Con parametro JVM al lanzar:
+      -Dpython.path=C:/Python311/python.exe
+      -Dsearch.max.results=20
+
+  Con variable de entorno (prefijo APP_, puntos = guiones bajos, mayusculas):
+      APP_PYTHON_PATH=C:\Python311\python.exe
+      APP_SEARCH_MAX_RESULTS=20
+
+
+----------------------------------------------------
+2. Python/pose_analyzer.py
+----------------------------------------------------
+
+Script de analisis de poses con MediaPipe.
+No requiere configuracion manual, pero necesita:
+
+  - Python 3.10 o superior instalado.
+  - Las dependencias indicadas en INSTRUCCIONES_INSTALACION.txt
+  - El modelo pose_landmarker_lite.task en la carpeta Python/
+    (se descarga automaticamente si hay conexion a internet).
+
+
+----------------------------------------------------
+3. Base de datos SQLite
+----------------------------------------------------
+
+La base de datos se crea automaticamente en:
+
+    cache/buscareferencias.db
+
+No es necesario configurarla manualmente.
+Se inicializa sola la primera vez que arranca la aplicacion
+con la opcion features.dbInitOnStartup=true.
